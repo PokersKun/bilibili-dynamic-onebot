@@ -55,7 +55,7 @@ object DynamicMessageTasker : BiliTasker() {
                 modules.moduleDynamic.major.opus = null
             }
         } catch (e: Exception) {
-            top.colter.mirai.plugin.bilibili.draw.logger.warning("专栏消息转换失败", e)
+            top.colter.mirai.plugin.bilibili.draw.logger.warn("专栏消息转换失败", e)
         }
 
         return DynamicMessage(

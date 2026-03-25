@@ -1,12 +1,9 @@
 package top.colter.mirai.plugin.bilibili.tasker
 
-import net.mamoe.mirai.Bot
-import net.mamoe.mirai.event.events.BotLeaveEvent
-import net.mamoe.mirai.event.events.GroupMessageEvent
-import net.mamoe.mirai.event.globalEventChannel
-import net.mamoe.mirai.message.data.*
 import top.colter.mirai.plugin.bilibili.BiliConfig
 import top.colter.mirai.plugin.bilibili.BiliData
+import top.colter.mirai.plugin.bilibili.command.DynamicCommand
+import top.colter.mirai.plugin.bilibili.onebot.*
 import top.colter.mirai.plugin.bilibili.service.DynamicService.removeAllSubscribe
 import top.colter.mirai.plugin.bilibili.service.TriggerMode
 import top.colter.mirai.plugin.bilibili.service.matchingRegular
@@ -15,57 +12,80 @@ import top.colter.mirai.plugin.bilibili.utils.*
 object ListenerTasker : BiliTasker() {
     override var interval: Int = -1
 
-    private val triggerMode = BiliConfig.linkResolveConfig.triggerMode
-    private val returnLink = BiliConfig.linkResolveConfig.returnLink
-    private val showLoadingMessage = BiliConfig.enableConfig.showLoadingMessage
+    private val triggerMode get() = BiliConfig.linkResolveConfig.triggerMode
+    private val returnLink get() = BiliConfig.linkResolveConfig.returnLink
+    private val showLoadingMessage get() = BiliConfig.enableConfig.showLoadingMessage
 
     override suspend fun main() {
-        globalEventChannel().subscribeAlways<BotLeaveEvent> {
-            val d = group.delegate
-            if (findContact(d) == null) {
-                removeAllSubscribe(d)
-                BiliData.dynamicPushTemplate.forEach { (_, c) -> c.remove(d) }
-                BiliData.livePushTemplate.forEach { (_, c) -> c.remove(d) }
-                logger.warning("Bot退出群 ${group.name}(${group.id}) 已删除此群的所有订阅数据")
+        // Register command handlers
+        DynamicCommand.register()
+
+        // Register notice handler: bot leave group
+        BotInstance.client.onNotice { event ->
+            if (event.noticeType == "group_decrease" && event.subType == "kick_me") {
+                val groupId = event.groupId
+                val d = (-groupId).toString() // delegate for group is negative
+                if (findContact(d) == null) {
+                    removeAllSubscribe(d)
+                    BiliData.dynamicPushTemplate.forEach { (_, c) -> c.remove(d) }
+                    BiliData.livePushTemplate.forEach { (_, c) -> c.remove(d) }
+                    logger.warn("Bot退出群 $groupId 已删除此群的所有订阅数据")
+                }
+                BotInstance.removeGroup(groupId)
             }
         }
 
-        globalEventChannel().subscribeAlways<GroupMessageEvent> {
-            var f = false
-            when (triggerMode) {
-                TriggerMode.At -> {
-                    val at = message.filterIsInstance(At::class.java)
-                    if (at.isNotEmpty() && at.any { Bot.instances.map { it.id }.contains(it.target) }) {
-                        f = true
-                    }
-                }
-                TriggerMode.Always -> f = true
-                TriggerMode.Never -> f = false
-            }
-            if (f) {
-                val msg = message.filter { it !is At && it !is Image }.toMessageChain().content.trim()
-                val type = matchingRegular(msg)
-                if (type != null) {
-                    val ms = if (showLoadingMessage) subject.sendMessage("加载中...") else null
-                    val img = type.drawGeneral()
-                    if (img == null) {
-                        ms?.recall()
-                        subject.sendMessage("解析失败")
-                        return@subscribeAlways
-                    }
-                    val imgMsg = subject.uploadImage(img, CacheType.DRAW_SEARCH)
-                    if (imgMsg == null) {
-                        ms?.recall()
-                        subject.sendMessage("图片上传失败")
-                        return@subscribeAlways
-                    }
-                    subject.sendMessage(buildMessageChain {
-                        + imgMsg
-                        if (returnLink) + PlainText(type.getLink())
-                    })
-                    ms?.recall()
-                }
+        // Register message handler: command dispatch + dialog routing + link resolve
+        BotInstance.client.onMessage { event ->
+            // First try to route to an active dialog session
+            if (DialogSessionManager.tryRoute(event)) return@onMessage
+
+            // Try command dispatch
+            if (CommandDispatcher.dispatch(event)) return@onMessage
+
+            // Link resolve (group messages only)
+            if (event.messageType == "group") {
+                handleLinkResolve(event)
             }
         }
+    }
+
+    private suspend fun handleLinkResolve(event: OneBotEvent) {
+        var shouldResolve = false
+        when (triggerMode) {
+            TriggerMode.At -> {
+                if (event.hasAtTarget(BotInstance.botId)) {
+                    shouldResolve = true
+                }
+            }
+            TriggerMode.Always -> shouldResolve = true
+            TriggerMode.Never -> shouldResolve = false
+        }
+        if (!shouldResolve) return
+
+        val msg = event.extractText()
+        val type = matchingRegular(msg) ?: return
+
+        val contact = BotInstance.getGroup(event.groupId) ?: return
+
+        val ms = if (showLoadingMessage) contact.sendMessage("加载中...") else null
+        val img = type.drawGeneral()
+        if (img == null) {
+            ms?.let { BotInstance.client.deleteMsg(it) }
+            contact.sendMessage("解析失败")
+            return
+        }
+        val imgMsg = uploadImage(img, CacheType.DRAW_SEARCH)
+        if (imgMsg == null) {
+            ms?.let { BotInstance.client.deleteMsg(it) }
+            contact.sendMessage("图片上传失败")
+            return
+        }
+
+        val segments = mutableListOf<MessageSegment>()
+        segments.addAll(parseMessageContent(imgMsg))
+        if (returnLink) segments.add(MessageSegment.text(type.getLink()))
+        contact.sendMessage(segments)
+        ms?.let { BotInstance.client.deleteMsg(it) }
     }
 }

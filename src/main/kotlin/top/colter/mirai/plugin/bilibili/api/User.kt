@@ -82,7 +82,7 @@ suspend fun BiliClient.searchUserVideo(
     count: Int = 1,
     order: String = "pubdate",
 ): VideoList? {
-    return getData(SPACE_SEARCH) {
+    return getDataWithWbi(SPACE_SEARCH) {
         parameter("mid", uid)
         parameter("ps", count)
         parameter("order", order)

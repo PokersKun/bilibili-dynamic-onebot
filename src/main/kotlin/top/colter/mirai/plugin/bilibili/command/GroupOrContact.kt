@@ -1,12 +1,11 @@
 package top.colter.mirai.plugin.bilibili.command
 
-import net.mamoe.mirai.contact.Contact
 import top.colter.mirai.plugin.bilibili.Group
-import top.colter.mirai.plugin.bilibili.utils.delegate
-import top.colter.mirai.plugin.bilibili.utils.name
+import top.colter.mirai.plugin.bilibili.onebot.OBContact
+import top.colter.mirai.plugin.bilibili.onebot.delegate
 
 data class GroupOrContact(
-    val contact: Contact? = null,
+    val contact: OBContact? = null,
     val group: Group? = null,
 )
 
@@ -17,4 +16,4 @@ val GroupOrContact.subject: String
     get() = group?.name ?: contact!!.delegate
 
 val GroupOrContact.name: String
-    get() = group?.name ?: contact!!.name
+    get() = group?.name ?: contact!!.contactName

@@ -2,8 +2,6 @@ package top.colter.mirai.plugin.bilibili.service
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import net.mamoe.mirai.contact.Friend
-import net.mamoe.mirai.contact.Group
 import top.colter.mirai.plugin.bilibili.BiliBiliDynamic
 import top.colter.mirai.plugin.bilibili.BiliConfig
 import top.colter.mirai.plugin.bilibili.SubData
@@ -11,6 +9,8 @@ import top.colter.mirai.plugin.bilibili.api.follow
 import top.colter.mirai.plugin.bilibili.api.groupAddUser
 import top.colter.mirai.plugin.bilibili.api.isFollow
 import top.colter.mirai.plugin.bilibili.api.userInfo
+import top.colter.mirai.plugin.bilibili.onebot.OBFriend
+import top.colter.mirai.plugin.bilibili.onebot.OBGroup
 import top.colter.mirai.plugin.bilibili.utils.actionNotify
 import top.colter.mirai.plugin.bilibili.utils.findContact
 
@@ -74,21 +74,10 @@ object DynamicService {
             dynamic[uid] = SubData(un)
         }
 
-        //dynamic[uid]?.contacts?.apply {
-        //    try {
-        //        subject.toLong()
-        //    } catch (e: NumberFormatException) {
-        //        group[subject]?.contacts?.let {
-        //            removeAll(it)
-        //        }
-        //    }
-        //    add(subject)
-        //}
         dynamic[uid]?.contacts?.add(subject)
         val contact = findContact(subject)
         if (isSelf) "订阅 ${dynamic[uid]?.name} 成功!"
-        else "为${if (contact is Group) "群" else "好友"} ${contact?.id} 订阅 ${dynamic[uid]?.name} 成功!"
-
+        else "为${if (contact is OBGroup) "群" else "好友"} ${contact?.id} 订阅 ${dynamic[uid]?.name} 成功!"
     }
 
     suspend fun removeSubscribe(uid: Long, subject: String, isSelf: Boolean = true) = mutex.withLock {
@@ -106,8 +95,8 @@ object DynamicService {
                 } == true) atAll.remove(subject)
             val contact = findContact(subject)
             if (isSelf) "取消订阅 ${user.name} 成功"
-            else "为${if (contact is Group) "群" else "好友"} ${contact?.id} 取消订阅 ${user.name} 成功"
-        }else "取消订阅失败"
+            else "为${if (contact is OBGroup) "群" else "好友"} ${contact?.id} 取消订阅 ${user.name} 成功"
+        } else "取消订阅失败"
     }
 
     suspend fun removeAllSubscribe(subject: String) = mutex.withLock {
@@ -126,7 +115,7 @@ object DynamicService {
                 if (subject in sub.contacts) {
                     appendLine("${sub.name}@$uid")
                     true
-                }else false
+                } else false
             }
             if (c == 0) appendLine("无")
             appendLine()
@@ -135,12 +124,11 @@ object DynamicService {
                 if (subject in sub.contacts) {
                     appendLine("${sub.title}@ss$ssid")
                     true
-                }else false
+                } else false
             }
             if (cc == 0) appendLine("无")
             appendLine()
             append("共 ${c + cc} 个订阅")
-            append("共 ${c} 个订阅")
         }
     }
 
@@ -165,37 +153,36 @@ object DynamicService {
                 dynamic.forEach { (_, sub) ->
                     user.addAll(sub.contacts)
                 }
-            }else {
-                val u = dynamic[uid]?: return@withLock "没有这个用户哦 [$uid]"
+            } else {
+                val u = dynamic[uid] ?: return@withLock "没有这个用户哦 [$uid]"
                 appendLine("${u.name}[$uid]")
                 appendLine()
                 user.addAll(u.contacts)
             }
-            val group = StringBuilder()
-            val friend = StringBuilder()
+            val groupSb = StringBuilder()
+            val friendSb = StringBuilder()
             val gg = StringBuilder()
             user.forEach {
                 try {
                     it.toLong()
                     findContact(it).apply {
                         when (this) {
-                            is Group -> group.appendLine("$name@$id")
-                            is Friend -> friend.appendLine("$nick@$id")
+                            is OBGroup -> groupSb.appendLine("$contactName@$id")
+                            is OBFriend -> friendSb.appendLine("$contactName@$id")
                         }
                     }
-                }catch (e: NumberFormatException) {
+                } catch (e: NumberFormatException) {
                     gg.appendLine(it)
                 }
             }
             appendLine("====群====")
-            append(group.ifEmpty { "无\n" })
+            append(groupSb.ifEmpty { "无\n" })
             appendLine("====好友====")
-            append(friend.ifEmpty { "无\n" })
+            append(friendSb.ifEmpty { "无\n" })
             appendLine("====分组====")
             append(gg.ifEmpty { "无\n" })
             appendLine()
             append("共 ${user.size} 名用户")
         }
-
     }
 }

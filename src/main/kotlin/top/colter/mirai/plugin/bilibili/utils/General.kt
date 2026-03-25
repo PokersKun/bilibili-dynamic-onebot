@@ -4,24 +4,20 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.utils.*
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import net.mamoe.mirai.Bot
-import net.mamoe.mirai.contact.Contact
-import net.mamoe.mirai.contact.Contact.Companion.sendImage
-import net.mamoe.mirai.contact.Friend
-import net.mamoe.mirai.contact.Group
-import net.mamoe.mirai.utils.ExternalResource
-import net.mamoe.mirai.utils.ExternalResource.Companion.toExternalResource
-import net.mamoe.mirai.utils.MiraiLogger
 import org.jetbrains.skia.Image
+import org.slf4j.LoggerFactory
 import top.colter.mirai.plugin.bilibili.BiliBiliDynamic
 import top.colter.mirai.plugin.bilibili.BiliBiliDynamic.dataFolderPath
 import top.colter.mirai.plugin.bilibili.BiliConfig
 import top.colter.mirai.plugin.bilibili.BiliData
+import top.colter.mirai.plugin.bilibili.OneBotConfig
 import top.colter.mirai.plugin.bilibili.api.searchUser
 import top.colter.mirai.plugin.bilibili.client.BiliClient
 import top.colter.mirai.plugin.bilibili.data.DynamicItem
 import top.colter.mirai.plugin.bilibili.data.DynamicType.*
+import top.colter.mirai.plugin.bilibili.onebot.*
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.security.MessageDigest
@@ -36,11 +32,7 @@ import kotlin.math.min
 
 
 internal val logger by lazy {
-    try {
-        BiliBiliDynamic.logger
-    } catch (_: Throwable) {
-        MiraiLogger.Factory.create(BiliBiliDynamic::class)
-    }
+    LoggerFactory.getLogger("Bili")
 }
 
 val biliClient = BiliClient()
@@ -138,7 +130,6 @@ val DynamicItem.link: String
 
 fun loadResource(file: String) =
     BiliBiliDynamic::class.java.getResource(file)?.path!!
-//BiliBiliDynamic::class.java.getResource(file)!!.openStream().use { it.readBytes() }
 
 fun loadResourceBytes(path: String) =
     BiliBiliDynamic.getResourceAsStream(path)!!.readBytes()
@@ -238,115 +229,78 @@ suspend fun getOrDownloadImageDefault(url: String, fallbackUrl: String, cacheTyp
     Image.makeFromEncoded(loadResourceBytes("image/IMAGE_MISS.png"))
 }
 
+// ==================== Image Upload (OneBot) ====================
 
-
-suspend fun Contact.sendImage(url: String, cacheType: CacheType = CacheType.UNKNOWN) = try {
-    getOrDownload(url, cacheType)?.toExternalResource()?.let { sendImage(it.toAutoCloseable()) }
-}catch (e: Exception){
-    logger.error("发送图片失败! $url\n$e")
-    null
-}
-
-suspend fun Contact.uploadImage(url: String, cacheType: CacheType = CacheType.UNKNOWN) = try {
-    getOrDownload(url, cacheType)?.toExternalResource()?.let { uploadImage(it.toAutoCloseable()) }
-}catch (e: Exception){
+/**
+ * Download image from URL, cache it, return OB image code placeholder.
+ */
+suspend fun uploadImage(url: String, cacheType: CacheType = CacheType.UNKNOWN): String? = try {
+    val bytes = getOrDownload(url, cacheType) ?: return null
+    val fileName = url.split("?").first().split("@").first().split("/").last()
+    val filePath = cacheType.cacheFile(fileName)
+    if (!filePath.exists()) filePath.writeBytes(bytes)
+    imageCode(filePath)
+} catch (e: Exception) {
     logger.error("上传图片失败! $url\n$e")
     null
 }
 
-suspend fun List<Contact>.uploadImage(url: String, cacheType: CacheType = CacheType.UNKNOWN): String? {
-    var sc: String? = null
-    for(c in this) {
-        sc = c.uploadImage(url, cacheType)?.serializeToMiraiCode()
-        if (sc != null) break
-    }
-    return sc
-}
-
-suspend fun List<Contact>.uploadImage(path: Path): String? =
-    uploadImage(path.readBytes().toExternalResource().toAutoCloseable())
-
-suspend fun List<Contact>.uploadImage(resource: ExternalResource): String? {
-    for(c in this) {
-        runCatching {
-            c.uploadImage(resource).serializeToMiraiCode()
-        }.onSuccess {
-            return it
-        }
-    }
-    return null
+/**
+ * Upload image from local path, return OB image code placeholder.
+ */
+fun uploadImage(path: Path): String? {
+    return if (path.exists()) imageCode(path) else null
 }
 
 /**
- * 查找Contact
+ * Send image directly to a contact.
  */
-fun findContact(del: String): Contact? {
+suspend fun OBContact.sendImage(url: String, cacheType: CacheType = CacheType.UNKNOWN) = try {
+    val bytes = getOrDownload(url, cacheType) ?: return null
+    val fileName = url.split("?").first().split("@").first().split("/").last()
+    val filePath = cacheType.cacheFile(fileName)
+    if (!filePath.exists()) filePath.writeBytes(bytes)
+    val b64 = java.util.Base64.getEncoder().encodeToString(filePath.toFile().readBytes())
+    sendMessage(listOf(MessageSegment.image("base64://$b64")))
+} catch (e: Exception) {
+    logger.error("发送图片失败! $url\n$e")
+    null
+}
+
+// ==================== Contact Lookup ====================
+
+/**
+ * 查找Contact by delegate string
+ */
+fun findContact(del: String): OBContact? {
     if (del.isBlank()) {
         logger.error("查找用户为空")
         return null
     }
-    val delegate = try { del.toLong() } catch (e: NumberFormatException) { return null }
-    try {
-        for (bot in Bot.instances) {
-            if (delegate < 0) {
-                for (group in bot.groups) {
-                    if (group.id == delegate * -1) return group
-                }
-            } else {
-                for (friend in bot.friends) {
-                    if (friend.id == delegate) return friend
-                }
-                for (stranger in bot.strangers) {
-                    if (stranger.id == delegate) return stranger
-                }
-                for (group in bot.groups) {
-                    for (member in group.members) {
-                        if (member.id == delegate) return member
-                    }
-                }
-            }
+    return runBlocking {
+        try {
+            BotInstance.findContact(del)
+        } catch (t: Throwable) {
+            logger.error("获取用户失败")
+            null
         }
-    }catch (t: Throwable) {
-        logger.error("获取用户失败")
-    }
-    logger.error("未找到此用户 [$del]")
-    return null
-}
-
-fun findContactAll(delegate: String): Contact? {
-    return try {
-        findContactAll(delegate.toLong())
-    }catch (e: NumberFormatException) {
+    } ?: run {
+        logger.error("未找到此用户 [$del]")
         null
     }
 }
 
-fun findContactAll(delegate: Long): Contact? {
-    for (bot in Bot.instances) {
-        for (friend in bot.friends) {
-            if (friend.id == delegate) return friend
-        }
-        for (group in bot.groups) {
-            if (group.id == delegate) return group
-        }
-        for (stranger in bot.strangers) {
-            if (stranger.id == delegate) return stranger
-        }
-        for (group in bot.groups) {
-            for (member in group.members) {
-                if (member.id == delegate) return member
-            }
-        }
+fun findContactAll(delegate: String): OBContact? {
+    return runBlocking {
+        BotInstance.findContactAll(delegate)
     }
-    return null
 }
 
-/**
- * 通过正负号区分群和用户
- * @author cssxsh
- */
-val Contact.delegate get() = (if (this is Group) id * -1 else id).toString()
-
+fun findContactAll(delegate: Long): OBContact? {
+    return runBlocking {
+        BotInstance.findContactAll(delegate)
+    }
+}
 
 fun findLocalIdOrName(target: String): List<Pair<Long, Double>> {
     return try {
@@ -388,7 +342,6 @@ fun fuzzySearch(
         bestMatches.size == 1 -> listOf(bestMatches.single().first to 1.0)
         else -> {
             if (bestMatches.first().second - bestMatches.last().second <= disambiguationRate) {
-                // resolution ambiguity
                 candidates
             } else {
                 listOf(bestMatches.first().first to 1.0)
@@ -415,13 +368,6 @@ internal fun String.fuzzyMatchWith(target: String): Double {
     return match.toDouble() / (longerLength + (shorterLength - match))
 }
 
-val Contact.name: String
-    get() = when (this) {
-        is Friend -> nick
-        is Group -> name
-        else -> id.toString()
-    }
-
 @Serializable
 data class ActionMessage(
     val operator: String,
@@ -435,7 +381,7 @@ suspend fun actionNotify(subject: Long?, operator: String, target: String, actio
 }
 
 suspend fun actionNotify(subject: Long?, message: ActionMessage) {
-    if (BiliConfig.enableConfig.notifyEnable && subject != BiliConfig.admin) {
+    if (BiliConfig.enableConfig.notifyEnable && (subject == null || !OneBotConfig.isAdmin(subject))) {
         actionNotify(buildString {
             appendLine("操作人: ${message.operator}")
             appendLine("目标: ${message.target}")
@@ -446,7 +392,9 @@ suspend fun actionNotify(subject: Long?, message: ActionMessage) {
 }
 
 suspend fun actionNotify(message: String) {
-    findContactAll(BiliConfig.admin)?.sendMessage(message)
+    // Notify the first admin in the list
+    val firstAdmin = OneBotConfig.adminIds.firstOrNull() ?: return
+    findContactAll(firstAdmin)?.sendMessage(message)
 }
 
 inline fun matchUser(user: String, matchSuccess: (uid: Long) -> String?): String? {

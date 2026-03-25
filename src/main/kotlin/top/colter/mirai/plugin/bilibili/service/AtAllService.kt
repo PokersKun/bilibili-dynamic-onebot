@@ -2,10 +2,10 @@ package top.colter.mirai.plugin.bilibili.service
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import net.mamoe.mirai.contact.Group
 import top.colter.mirai.plugin.bilibili.AtAllType
 import top.colter.mirai.plugin.bilibili.command.GroupOrContact
 import top.colter.mirai.plugin.bilibili.command.subject
+import top.colter.mirai.plugin.bilibili.onebot.OBGroup
 
 object AtAllService {
     private val mutex = Mutex()
@@ -24,8 +24,8 @@ object AtAllService {
     suspend fun addAtAll(type: String, uid: Long = 0L, target: GroupOrContact) = mutex.withLock {
         val atAllType = toAtAllType(type) ?: return "没有这个类型哦 [$type]"
         if (target.group == null) {
-            if (target.contact !is Group) return "仅在群聊中有用哦"
-            if (target.contact.botPermission.level == 0) return "Bot不为管理员, 无法使用At全体"
+            if (target.contact !is OBGroup) return "仅在群聊中有用哦"
+            if ((target.contact as OBGroup).botPermissionLevel == 0) return "Bot不为管理员, 无法使用At全体"
         }
         val list = atAll.getOrPut(target.subject) { mutableMapOf() }.getOrPut(uid) { mutableSetOf() }
         if (list.isEmpty()) {
@@ -64,4 +64,3 @@ object AtAllService {
         buildString { list.forEach { appendLine(it.value) } }
     }
 }
-

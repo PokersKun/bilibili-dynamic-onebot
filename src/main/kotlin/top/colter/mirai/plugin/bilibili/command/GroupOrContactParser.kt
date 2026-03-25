@@ -1,19 +1,23 @@
 package top.colter.mirai.plugin.bilibili.command
 
-import net.mamoe.mirai.console.command.CommandSender
-import net.mamoe.mirai.console.command.descriptor.CommandValueArgumentParser
-import net.mamoe.mirai.console.command.descriptor.ExistingContactValueArgumentParser
 import top.colter.mirai.plugin.bilibili.BiliData
+import top.colter.mirai.plugin.bilibili.onebot.OBContact
+import top.colter.mirai.plugin.bilibili.utils.findContact
+import top.colter.mirai.plugin.bilibili.utils.findContactAll
 
-object GroupOrContactParser: CommandValueArgumentParser<GroupOrContact> {
-
-    override fun parse(raw: String, sender: CommandSender): GroupOrContact {
-        val group = BiliData.group[raw]
-        return GroupOrContact(
-            if (group == null) ExistingContactValueArgumentParser.parse(raw, sender) else null,
-            group
-        )
+/**
+ * Parse a string argument into a GroupOrContact.
+ * If it matches a BiliData group name, returns that group.
+ * Otherwise tries to find a contact by actual ID (group or friend),
+ * then falls back to delegate string lookup.
+ */
+fun parseGroupOrContact(raw: String, defaultContact: OBContact): GroupOrContact {
+    val group = BiliData.group[raw]
+    return if (group != null) {
+        GroupOrContact(group = group)
+    } else {
+        // First try as actual ID (matches both groups and friends)
+        val contact = findContactAll(raw) ?: findContact(raw) ?: defaultContact
+        GroupOrContact(contact = contact)
     }
-
 }
-

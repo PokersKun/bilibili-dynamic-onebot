@@ -1,50 +1,55 @@
 package top.colter.mirai.plugin.bilibili
 
 import kotlinx.serialization.Serializable
-import net.mamoe.mirai.console.data.AutoSavePluginData
-import net.mamoe.mirai.console.data.ValueDescription
-import net.mamoe.mirai.console.data.value
-import top.colter.mirai.plugin.bilibili.utils.findContact
-import top.colter.mirai.plugin.bilibili.utils.findContactAll
-import top.colter.mirai.plugin.bilibili.utils.name
+import top.colter.mirai.plugin.bilibili.onebot.BotInstance
+import top.colter.mirai.plugin.bilibili.onebot.ConfigManager
+import top.colter.mirai.plugin.bilibili.onebot.OBFriend
+import top.colter.mirai.plugin.bilibili.onebot.OBGroup
+import java.io.File
 import java.time.Instant
 
-object BiliData : AutoSavePluginData("BiliData") {
-    @ValueDescription("数据版本")
-    var dataVersion: Int by value(0)
+object BiliData {
+    private lateinit var dataFile: File
+    private var data: BiliDataStore = BiliDataStore()
 
-    // key: uid
-    @ValueDescription("订阅信息")
-    val dynamic: MutableMap<Long, SubData> by value(mutableMapOf(0L to SubData("ALL")))
+    var dataVersion: Int
+        get() = data.dataVersion
+        set(value) { data.dataVersion = value }
 
-    // key: contact
-    @ValueDescription("动态过滤")
-    val filter: MutableMap<String, MutableMap<Long, DynamicFilter>> by value()
+    val dynamic: MutableMap<Long, SubData> get() = data.dynamic
+    val filter: MutableMap<String, MutableMap<Long, DynamicFilter>> get() = data.filter
+    val dynamicPushTemplate: MutableMap<String, MutableSet<String>> get() = data.dynamicPushTemplate
+    val livePushTemplate: MutableMap<String, MutableSet<String>> get() = data.livePushTemplate
+    val liveCloseTemplate: MutableMap<String, MutableSet<String>> get() = data.liveCloseTemplate
+    val atAll: MutableMap<String, MutableMap<Long, MutableSet<AtAllType>>> get() = data.atAll
+    val group: MutableMap<String, Group> get() = data.group
+    val bangumi: MutableMap<Long, Bangumi> get() = data.bangumi
 
-    // key: template name
-    @ValueDescription("动态推送模板")
-    val dynamicPushTemplate: MutableMap<String, MutableSet<String>> by value()
+    fun init(dataDir: File) {
+        dataFile = dataDir.resolve("BiliData.yml")
+    }
 
-    // key: template name
-    @ValueDescription("直播推送模板")
-    val livePushTemplate: MutableMap<String, MutableSet<String>> by value()
+    fun reload() {
+        data = ConfigManager.loadYaml(dataFile, BiliDataStore())
+    }
 
-    // key: template name
-    @ValueDescription("直播结束模板")
-    val liveCloseTemplate: MutableMap<String, MutableSet<String>> by value()
-
-    // key: contact
-    @ValueDescription("AtAll")
-    val atAll: MutableMap<String, MutableMap<Long, MutableSet<AtAllType>>> by value()
-
-    // key: group name
-    @ValueDescription("分组")
-    val group: MutableMap<String, Group> by value()
-
-    // key: season id
-    @ValueDescription("番剧")
-    val bangumi: MutableMap<Long, Bangumi> by value(mutableMapOf())
+    fun save() {
+        ConfigManager.saveYaml(dataFile, data)
+    }
 }
+
+@Serializable
+data class BiliDataStore(
+    var dataVersion: Int = 0,
+    val dynamic: MutableMap<Long, SubData> = mutableMapOf(0L to SubData("ALL")),
+    val filter: MutableMap<String, MutableMap<Long, DynamicFilter>> = mutableMapOf(),
+    val dynamicPushTemplate: MutableMap<String, MutableSet<String>> = mutableMapOf(),
+    val livePushTemplate: MutableMap<String, MutableSet<String>> = mutableMapOf(),
+    val liveCloseTemplate: MutableMap<String, MutableSet<String>> = mutableMapOf(),
+    val atAll: MutableMap<String, MutableMap<Long, MutableSet<AtAllType>>> = mutableMapOf(),
+    val group: MutableMap<String, Group> = mutableMapOf(),
+    val bangumi: MutableMap<Long, Bangumi> = mutableMapOf(),
+)
 
 @Serializable
 data class SubData(
@@ -64,16 +69,16 @@ data class Group(
     val contacts: MutableSet<String> = mutableSetOf(),
 ) {
     override fun toString(): String {
-        return """
-分组名: $name
-创建者: ${findContactAll(creator)?.run { "$name($id)" }?:creator}
-
-管理员: 
-${admin.joinToString("\n") { findContactAll(it)?.run { "$name($id)" }?:it.toString() }.ifEmpty { "暂无管理员" }}
-
-用户: 
-${contacts.joinToString("\n") { findContact(it)?.run { "$name($id)" }?:it }.ifEmpty { "暂无用户" }}
-""".trimIndent()
+        return buildString {
+            appendLine("分组名: $name")
+            appendLine("创建者: $creator")
+            appendLine()
+            appendLine("管理员: ")
+            appendLine(admin.joinToString("\n") { it.toString() }.ifEmpty { "暂无管理员" })
+            appendLine()
+            appendLine("用户: ")
+            appendLine(contacts.joinToString("\n").ifEmpty { "暂无用户" })
+        }.trimEnd()
     }
 }
 

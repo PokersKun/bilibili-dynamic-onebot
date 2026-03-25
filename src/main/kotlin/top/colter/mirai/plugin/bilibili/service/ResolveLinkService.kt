@@ -44,7 +44,7 @@ fun matchingInternalRegular(content: String): ResolvedLinkInfo? {
     return if (matchResult != null && type != null) {
         ResolvedLinkInfo(type, matchResult.destructured.component1())
     }else {
-        logger.warning("未匹配到链接! -> $content")
+        logger.warn("未匹配到链接! -> $content")
         null
     }
 }

@@ -24,7 +24,7 @@ val quality: Quality by lazy {
     var quality: Quality?
     if (BiliImageQuality.customOverload) {
         quality = BiliImageQuality.customQuality
-        logger.warning("图片分辨率配置已重载")
+        logger.warn("图片分辨率配置已重载")
     } else {
         quality = BiliImageQuality.quality[imageConfig.quality]
         if (quality == null) {
@@ -41,7 +41,7 @@ val theme: Theme by lazy {
     var theme: Theme?
     if (BiliImageTheme.customOverload) {
         theme = BiliImageTheme.customTheme
-        logger.warning("图片主题配置已重载")
+        logger.warn("图片主题配置已重载")
     } else {
         theme = BiliImageTheme.theme[imageConfig.theme]
         if (theme == null) {
@@ -64,7 +64,7 @@ val mainTypeface: Typeface by lazy {
     val mainFont = imageConfig.font.split(";").first().split(".").first()
     try {
         if (mainFont.isBlank()) {
-            logger.warning("配置文件未配置字体, 尝试加载 font 目录下的字体")
+            logger.warn("配置文件未配置字体, 尝试加载 font 目录下的字体")
             val f = FontUtils.defaultFont
             if (f == null) {
                 throw Exception()
@@ -76,7 +76,7 @@ val mainTypeface: Typeface by lazy {
             matchFamily(mainFont).matchStyle(FontStyle.NORMAL)!!
         }
     } catch (e: Exception) {
-        logger.warning("加载主字体 $mainFont 失败, 尝试加载默认字体")
+        logger.warn("加载主字体 $mainFont 失败, 尝试加载默认字体")
         loadSysDefaultFont()
     }
 }
@@ -100,7 +100,11 @@ val font: Font by lazy {
 }
 
 val emojiTypeface: Typeface? by lazy {
-    xyz.cssxsh.skia.FontUtils.matchFamily("Noto Color Emoji")?.matchStyle(FontStyle.NORMAL)
+    try {
+        matchFamily("Noto Color Emoji").matchStyle(FontStyle.NORMAL)
+    } catch (_: Exception) {
+        null
+    }
 }
 
 val emojiFont: Font by lazy {

@@ -1,427 +1,414 @@
 package top.colter.mirai.plugin.bilibili.command
 
-import kotlinx.coroutines.TimeoutCancellationException
-import net.mamoe.mirai.console.command.CommandSender
-import net.mamoe.mirai.console.command.CommandSenderOnMessage
-import net.mamoe.mirai.console.command.CompositeCommand
-import net.mamoe.mirai.console.command.descriptor.CommandArgumentParserException
-import net.mamoe.mirai.console.command.descriptor.buildCommandArgumentContext
-import net.mamoe.mirai.console.permission.PermissionService.Companion.hasPermission
-import net.mamoe.mirai.contact.Contact
-import net.mamoe.mirai.message.data.PlainText
-import net.mamoe.mirai.message.data.buildMessageChain
-import net.mamoe.mirai.message.data.content
-import net.mamoe.mirai.message.nextMessage
-import net.mamoe.mirai.utils.ExternalResource.Companion.sendAsImageTo
-import net.mamoe.mirai.utils.ExternalResource.Companion.toExternalResource
 import top.colter.mirai.plugin.bilibili.*
-import top.colter.mirai.plugin.bilibili.BiliBiliDynamic.crossContact
-import top.colter.mirai.plugin.bilibili.BiliBiliDynamic.logger
 import top.colter.mirai.plugin.bilibili.api.getDynamicDetail
 import top.colter.mirai.plugin.bilibili.api.getLive
 import top.colter.mirai.plugin.bilibili.api.getUserNewDynamic
 import top.colter.mirai.plugin.bilibili.api.searchUserVideo
 import top.colter.mirai.plugin.bilibili.data.DynamicDetail
 import top.colter.mirai.plugin.bilibili.data.LiveDetail
+import top.colter.mirai.plugin.bilibili.onebot.*
 import top.colter.mirai.plugin.bilibili.service.*
 import top.colter.mirai.plugin.bilibili.utils.*
-import xyz.cssxsh.mirai.skia.MiraiSkiaPlugin.reload
+import top.colter.mirai.plugin.bilibili.utils.logger as utilsLogger
 
-object DynamicCommand : CompositeCommand(
-    owner = BiliBiliDynamic,
-    "bili",
-    description = "动态指令",
-    overrideContext = buildCommandArgumentContext {
-        GroupOrContact::class with GroupOrContactParser
-    }
-) {
+object DynamicCommand {
+    private val logger get() = utilsLogger
 
-    private val admin by BiliConfig::admin
     private val showLoadingMessage get() = BiliConfig.enableConfig.showLoadingMessage
 
-    @SubCommand("h", "help", "帮助", "menu")
-    suspend fun CommandSender.help() {
-        loadResourceBytes("image/HELP.png").toExternalResource().toAutoCloseable().sendAsImageTo(Contact())
+    fun register() {
+        CommandDispatcher.register("help", "h", "帮助", "menu", description = "查看帮助信息") { ctx -> help(ctx) }
+        CommandDispatcher.register("reload", "重载", description = "重载配置文件") { ctx -> reload(ctx) }
+        CommandDispatcher.register("color", "颜色", description = "设置主题色 <用户> <颜色>") { ctx -> color(ctx) }
+        CommandDispatcher.register("add", "follow", "添加", "订阅", description = "订阅UP主 <UID> [目标]") { ctx -> add(ctx) }
+        CommandDispatcher.register("del", "unfollow", "删除", description = "取消订阅 <用户> [目标]") { ctx -> del(ctx) }
+        CommandDispatcher.register("delall", "删除全部订阅", description = "删除全部订阅 [目标]") { ctx -> delAll(ctx) }
+        CommandDispatcher.register("list", "列表", description = "查看订阅列表 [目标]") { ctx -> list(ctx) }
+        CommandDispatcher.register("listall", "la", "全部订阅列表", description = "查看全部订阅") { ctx -> listAll(ctx) }
+        CommandDispatcher.register("listuser", "lu", "用户列表", description = "查看已订阅用户 [用户]") { ctx -> listUser(ctx) }
+        CommandDispatcher.register("filtermode", "fm", "过滤模式", description = "设置过滤模式 <t|r> <w|b> [uid] [目标]") { ctx -> filterMode(ctx) }
+        CommandDispatcher.register("filtertype", "ft", "类型过滤", description = "添加类型过滤 <类型> [uid] [目标]") { ctx -> filterType(ctx) }
+        CommandDispatcher.register("filterreg", "fr", "正则过滤", description = "添加正则过滤 <正则> [uid] [目标]") { ctx -> filterReg(ctx) }
+        CommandDispatcher.register("filterlist", "fl", "过滤列表", description = "查看过滤列表 [uid] [目标]") { ctx -> filterList(ctx) }
+        CommandDispatcher.register("filterdel", "fd", "过滤删除", description = "删除过滤项 <序号> [uid] [目标]") { ctx -> filterDel(ctx) }
+        CommandDispatcher.register("templatelist", "tl", "模板列表", description = "查看推送模板 [类型:d|l|le]") { ctx -> templateList(ctx) }
+        CommandDispatcher.register("template", "t", "模板", description = "设置推送模板 <类型:d|l|le> <模板名> [目标]") { ctx -> template(ctx) }
+        CommandDispatcher.register("login", "登录", description = "扫码登录B站") { ctx -> login(ctx) }
+        CommandDispatcher.register("atall", "aa", "at全体", description = "添加@全体 [类型] [用户] [目标]") { ctx -> atall(ctx) }
+        CommandDispatcher.register("delatall", "daa", "取消at全体", description = "取消@全体 [类型] [用户] [目标]") { ctx -> delAtall(ctx) }
+        CommandDispatcher.register("listatall", "laa", "at全体列表", description = "查看@全体列表 [用户] [目标]") { ctx -> listAtall(ctx) }
+        CommandDispatcher.register("config", "配置", description = "交互式配置 [用户] [目标]") { ctx -> config(ctx) }
+        CommandDispatcher.register("search", "s", "搜索", description = "获取动态详情 <动态ID>") { ctx -> search(ctx) }
+        CommandDispatcher.register("live", "直播", description = "查看当前直播状态") { ctx -> live(ctx) }
+        CommandDispatcher.register("new", "最新动态", description = "获取最新动态 <用户> [数量]") { ctx -> new(ctx) }
+        CommandDispatcher.register("video", "最新视频", description = "获取最新视频 <用户>") { ctx -> newVideo(ctx) }
+        CommandDispatcher.register("create", "创建分组", description = "创建分组 <分组名>") { ctx -> createGroup(ctx) }
+        CommandDispatcher.register("listgroup", "lg", "分组列表", description = "查看分组列表 [分组名]") { ctx -> listGroup(ctx) }
+        CommandDispatcher.register("delgroup", "dg", "删除分组", description = "删除分组 <分组名>") { ctx -> delGroup(ctx) }
+        CommandDispatcher.register("addgroupadmin", "aga", "添加分组管理员", description = "添加分组管理员 <分组名> <联系人>") { ctx -> setGroupAdmin(ctx) }
+        CommandDispatcher.register("bangroupadmin", "bga", "删除分组管理员", description = "删除分组管理员 <分组名> <联系人>") { ctx -> banGroupAdmin(ctx) }
+        CommandDispatcher.register("push", "添加分组", description = "推送到分组 <分组名> <联系人>") { ctx -> pushGroup(ctx) }
+        CommandDispatcher.register("ban", description = "从分组移除 <分组名> <联系人>") { ctx -> delGroupContact(ctx) }
+        CommandDispatcher.register("clear", description = "清理无效订阅") { ctx -> clear(ctx) }
     }
 
-    @SubCommand("reload", "重载")
-    suspend fun CommandSender.reload() {
+    // ==================== Helper ====================
+
+    private fun resolveTarget(ctx: CommandContext, argIndex: Int = -1): GroupOrContact {
+        val raw = if (argIndex >= 0 && argIndex < ctx.args.size) ctx.args[argIndex] else null
+        return if (raw != null) {
+            parseGroupOrContact(raw, ctx.contact)
+        } else {
+            GroupOrContact(contact = ctx.contact)
+        }
+    }
+
+    // ==================== Commands ====================
+
+    private suspend fun help(ctx: CommandContext) {
+        val imgBytes = loadResourceBytes("image/HELP.png")
+        ctx.sendMessage(listOf(MessageSegment.image(imageCodeRaw(imgBytes))))
+    }
+
+    private suspend fun reload(ctx: CommandContext) {
         BiliConfig.reload()
-        sendMessage("配置重载成功")
+        ctx.sendMessage("配置重载成功")
     }
 
-    @SubCommand("color", "颜色")
-    suspend fun CommandSender.color(user: String, color: String) {
+    private suspend fun color(ctx: CommandContext) {
+        val user = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili color <用户> <颜色>").let {}
+        val color = ctx.args.getOrNull(1) ?: return ctx.sendMessage("用法: /bili color <用户> <颜色>").let {}
         matchUser(user) {
             DynamicService.setColor(it, color)
         }?.let {
-            sendMessage(it)
-            actionNotify(this.subject?.id, name, user, "修改主题色", it)
+            ctx.sendMessage(it)
+            actionNotify(ctx.contact.id, ctx.contact.contactName, user, "修改主题色", it)
         }
     }
 
-    @SubCommand("add", "follow", "添加", "订阅")
-    suspend fun CommandSender.add(id: String, target: GroupOrContact = GroupOrContact(Contact())) {
-        if (checkPerm(target)) {
-            if (pgcRegex.matches(id)) {
-                sendMessage(PgcService.followPgc(id, target.subject))
-            } else try {
-                DynamicService.addSubscribe(id.toLong(), target.subject, this.subject?.delegate == target.subject).let {
-                    sendMessage(it)
-                    actionNotify(this.subject?.id, name, target.name, "订阅", it)
-                }
-            } catch (e: NumberFormatException) {
-                sendMessage("ID错误 [$id]")
-            } catch (e: Exception) {
-                sendMessage("订阅失败 ${e.message}")
+    private suspend fun add(ctx: CommandContext) {
+        val id = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili add <ID> [目标]").let {}
+        val target = resolveTarget(ctx, 1)
+
+        if (pgcRegex.matches(id)) {
+            ctx.sendMessage(PgcService.followPgc(id, target.subject))
+        } else try {
+            DynamicService.addSubscribe(id.toLong(), target.subject, ctx.contact.delegate == target.subject).let {
+                ctx.sendMessage(it)
+                actionNotify(ctx.contact.id, ctx.contact.contactName, target.name, "订阅", it)
             }
+        } catch (e: NumberFormatException) {
+            ctx.sendMessage("ID错误 [$id]")
+        } catch (e: Exception) {
+            ctx.sendMessage("订阅失败 ${e.message}")
         }
     }
 
-    @SubCommand("del", "unfollow", "删除")
-    suspend fun CommandSender.del(id: String, target: GroupOrContact = GroupOrContact(Contact())) {
-        if (checkPerm(target)) {
-            if (pgcRegex.matches(id)) {
-                sendMessage(PgcService.delPgc(id, target.subject))
-            } else matchUser(id) {
-                DynamicService.removeSubscribe(it, target.subject, this.subject?.delegate == target.subject)
-            }?.let {
-                sendMessage(it)
-                actionNotify(this.subject?.id, name, target.name, "取消订阅", it)
-            }
+    private suspend fun del(ctx: CommandContext) {
+        val id = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili del <ID> [目标]").let {}
+        val target = resolveTarget(ctx, 1)
+
+        if (pgcRegex.matches(id)) {
+            ctx.sendMessage(PgcService.delPgc(id, target.subject))
+        } else matchUser(id) {
+            DynamicService.removeSubscribe(it, target.subject, ctx.contact.delegate == target.subject)
+        }?.let {
+            ctx.sendMessage(it)
+            actionNotify(ctx.contact.id, ctx.contact.contactName, target.name, "取消订阅", it)
         }
     }
 
-    @SubCommand("delAll", "删除全部订阅")
-    suspend fun CommandSender.delAll(target: GroupOrContact = GroupOrContact(Contact())) {
-        if (checkPerm(target)) {
-            val msg = DynamicService.removeAllSubscribe(target.subject).let { "删除订阅成功! 共删除 $it 个订阅" }
-            sendMessage(msg)
-            actionNotify(this.subject?.id, name, target.name, "取消全部订阅", msg)
+    private suspend fun delAll(ctx: CommandContext) {
+        val target = resolveTarget(ctx, 0)
+
+        val msg = DynamicService.removeAllSubscribe(target.subject).let { "删除订阅成功! 共删除 $it 个订阅" }
+        ctx.sendMessage(msg)
+        actionNotify(ctx.contact.id, ctx.contact.contactName, target.name, "取消全部订阅", msg)
+    }
+
+    private suspend fun list(ctx: CommandContext) {
+        val target = resolveTarget(ctx, 0)
+
+        ctx.sendMessage(DynamicService.list(target.subject))
+    }
+
+    private suspend fun listAll(ctx: CommandContext) {
+        ctx.sendMessage(DynamicService.listAll())
+    }
+
+    private suspend fun listUser(ctx: CommandContext) {
+        val user = ctx.args.getOrNull(0) ?: ""
+        if (user.isEmpty()) {
+            ctx.sendMessage(DynamicService.listUser())
+        } else {
+            matchUser(user) {
+                DynamicService.listUser(it)
+            }?.let { ctx.sendMessage(it) }
         }
     }
 
-    @SubCommand("list", "列表")
-    suspend fun CommandSender.list(target: GroupOrContact = GroupOrContact(Contact())) {
-        if (checkPerm(target)) {
-            sendMessage(DynamicService.list(target.subject))
-        }
-    }
+    private suspend fun filterMode(ctx: CommandContext) {
+        // /bili fm <t|r> <w|b> [uid] [target]
+        val type = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili fm <t|r> <w|b> [uid] [目标]").let {}
+        val mode = ctx.args.getOrNull(1) ?: return ctx.sendMessage("用法: /bili fm <t|r> <w|b> [uid] [目标]").let {}
+        val uid = ctx.args.getOrNull(2)?.toLongOrNull() ?: 0L
+        val target = resolveTarget(ctx, 3)
 
-    @SubCommand("listAll", "la", "全部订阅列表")
-    suspend fun CommandSender.listAll() {
-        if (admin == Contact().id || admin == user?.id || user == null)
-            sendMessage(DynamicService.listAll())
-        else sendMessage("仅bot管理员可获取")
-    }
-
-    @SubCommand("listUser", "lu", "用户列表")
-    suspend fun CommandSender.listUser(user: String = "") {
-        if (admin == Contact().id || admin == this.user?.id || this.user == null)
-            if (user.isEmpty()) {
-                sendMessage(DynamicService.listUser())
-            } else {
-                matchUser(user) {
-                    DynamicService.listUser(it)
-                }?.let { sendMessage(it) }
-            }
-        else sendMessage("仅bot管理员可获取")
-    }
-
-    @SubCommand("filterMode", "fm", "过滤模式")
-    suspend fun CommandSender.filterMode(
-        type: String,
-        mode: String,
-        uid: Long = 0L,
-        target: GroupOrContact = GroupOrContact(Contact())
-    ) {
-        if (checkPerm(target)) {
-            sendMessage(
-                FilterService.addFilter(
-                    if (type == "t") FilterType.TYPE else FilterType.REGULAR,
-                    if (mode == "w") FilterMode.WHITE_LIST else FilterMode.BLACK_LIST,
-                    null, uid, target.subject
-                )
+        ctx.sendMessage(
+            FilterService.addFilter(
+                if (type == "t") FilterType.TYPE else FilterType.REGULAR,
+                if (mode == "w") FilterMode.WHITE_LIST else FilterMode.BLACK_LIST,
+                null, uid, target.subject
             )
-        }
+        )
     }
 
-    @SubCommand("filterType", "ft", "类型过滤")
-    suspend fun CommandSender.filterType(
-        type: String,
-        uid: Long = 0L,
-        target: GroupOrContact = GroupOrContact(Contact())
-    ) {
-        if (checkPerm(target)) {
-            sendMessage(FilterService.addFilter(FilterType.TYPE, null, type, uid, target.subject))
-        }
+    private suspend fun filterType(ctx: CommandContext) {
+        val type = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili ft <类型> [uid] [目标]").let {}
+        val uid = ctx.args.getOrNull(1)?.toLongOrNull() ?: 0L
+        val target = resolveTarget(ctx, 2)
+
+        ctx.sendMessage(FilterService.addFilter(FilterType.TYPE, null, type, uid, target.subject))
     }
 
-    @SubCommand("filterReg", "fr", "正则过滤")
-    suspend fun CommandSender.filterReg(
-        reg: String,
-        uid: Long = 0L,
-        target: GroupOrContact = GroupOrContact(Contact())
-    ) {
-        if (checkPerm(target)) {
-            sendMessage(FilterService.addFilter(FilterType.REGULAR, null, reg, uid, target.subject))
-        }
+    private suspend fun filterReg(ctx: CommandContext) {
+        val reg = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili fr <正则> [uid] [目标]").let {}
+        val uid = ctx.args.getOrNull(1)?.toLongOrNull() ?: 0L
+        val target = resolveTarget(ctx, 2)
+
+        ctx.sendMessage(FilterService.addFilter(FilterType.REGULAR, null, reg, uid, target.subject))
     }
 
-    @SubCommand("filterList", "fl", "过滤列表")
-    suspend fun CommandSender.filterList(uid: Long = 0L, target: GroupOrContact = GroupOrContact(Contact())) {
-        if (checkPerm(target)) {
-            sendMessage(FilterService.listFilter(uid, target.subject))
-        }
+    private suspend fun filterList(ctx: CommandContext) {
+        val uid = ctx.args.getOrNull(0)?.toLongOrNull() ?: 0L
+        val target = resolveTarget(ctx, 1)
+
+        ctx.sendMessage(FilterService.listFilter(uid, target.subject))
     }
 
-    @SubCommand("filterDel", "fd", "过滤删除")
-    suspend fun CommandSender.filterDel(
-        index: String,
-        uid: Long = 0L,
-        target: GroupOrContact = GroupOrContact(Contact())
-    ) {
-        if (checkPerm(target)) {
-            sendMessage(FilterService.delFilter(index, uid, target.subject))
-        }
+    private suspend fun filterDel(ctx: CommandContext) {
+        val index = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili fd <索引> [uid] [目标]").let {}
+        val uid = ctx.args.getOrNull(1)?.toLongOrNull() ?: 0L
+        val target = resolveTarget(ctx, 2)
+
+        ctx.sendMessage(FilterService.delFilter(index, uid, target.subject))
     }
 
-    @SubCommand("templateList", "tl", "模板列表")
-    suspend fun CommandSenderOnMessage<*>.templateList(type: String = "d") {
-        val ms = if (showLoadingMessage) subject?.sendMessage("加载中...") else null
-        TemplateService.listTemplate(type, Contact())
-        ms?.recall()
+    private suspend fun templateList(ctx: CommandContext) {
+        val type = ctx.args.getOrNull(0) ?: "d"
+        val ms = if (showLoadingMessage) ctx.sendMessage("加载中...") else null
+        TemplateService.listTemplate(type, ctx.contact)
+        ms?.let { ctx.deleteMessage(it) }
     }
 
-    @SubCommand("template", "t", "模板")
-    suspend fun CommandSender.template(
-        type: String,
-        template: String,
-        target: GroupOrContact = GroupOrContact(Contact())
-    ) {
-        if (checkPerm(target)) {
-            sendMessage(TemplateService.setTemplate(type, template, target.subject))
-        }
+    private suspend fun template(ctx: CommandContext) {
+        val type = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili t <类型> <模板> [目标]").let {}
+        val templateName = ctx.args.getOrNull(1) ?: return ctx.sendMessage("用法: /bili t <类型> <模板> [目标]").let {}
+        val target = resolveTarget(ctx, 2)
+
+        ctx.sendMessage(TemplateService.setTemplate(type, templateName, target.subject))
     }
 
-    @SubCommand("login", "登录")
-    suspend fun CommandSenderOnMessage<*>.login() {
-        val subject = Contact()
-        if (BiliConfig.admin == subject.id || BiliConfig.admin == user?.id)
-            LoginService.login(subject)
-        else sendMessage("仅bot管理员可进行登录")
+    private suspend fun login(ctx: CommandContext) {
+        LoginService.login(ctx.contact)
     }
 
-    @SubCommand("atall", "aa", "at全体")
-    suspend fun CommandSender.atall(
-        type: String = "a",
-        user: String = "0",
-        target: GroupOrContact = GroupOrContact(Contact())
-    ) {
-        if (checkPerm(target)) {
+    private suspend fun atall(ctx: CommandContext) {
+        val type = ctx.args.getOrNull(0) ?: "a"
+        val user = ctx.args.getOrNull(1) ?: "0"
+        val target = resolveTarget(ctx, 2)
+
+        matchUser(user) {
+            AtAllService.addAtAll(type, it, target)
+        }?.let { ctx.sendMessage(it) }
+    }
+
+    private suspend fun delAtall(ctx: CommandContext) {
+        val type = ctx.args.getOrNull(0) ?: "a"
+        val user = ctx.args.getOrNull(1) ?: "0"
+        val target = resolveTarget(ctx, 2)
+
+        matchUser(user) {
+            AtAllService.delAtAll(type, it, target.subject)
+        }?.let { ctx.sendMessage(it) }
+    }
+
+    private suspend fun listAtall(ctx: CommandContext) {
+        val user = ctx.args.getOrNull(0) ?: "0"
+        val target = resolveTarget(ctx, 1)
+
+        matchUser(user) {
+            AtAllService.listAtAll(it, target.subject)
+        }?.let { ctx.sendMessage(it) }
+    }
+
+    private suspend fun config(ctx: CommandContext) {
+        val user = ctx.args.getOrNull(0) ?: "0"
+        val target = resolveTarget(ctx, 1)
+
+        if (user == "0") {
+            ConfigService.config(ctx, 0, target.contact ?: ctx.contact)
+        } else {
             matchUser(user) {
-                AtAllService.addAtAll(type, it, target)
-            }?.let { sendMessage(it) }
+                ConfigService.config(ctx, it, target.contact ?: ctx.contact)
+                null
+            }?.let { ctx.sendMessage(it) }
         }
     }
 
-    @SubCommand("delAtall", "daa", "取消at全体")
-    suspend fun CommandSender.delAtall(
-        type: String = "a",
-        user: String = "0",
-        target: GroupOrContact = GroupOrContact(Contact())
-    ) {
-        if (checkPerm(target)) {
-            matchUser(user) {
-                AtAllService.delAtAll(type, it, target.subject)
-            }?.let { sendMessage(it) }
-        }
-    }
-
-    @SubCommand("listAtall", "laa", "at全体列表")
-    suspend fun CommandSender.listAtall(user: String = "0", target: GroupOrContact = GroupOrContact(Contact())) {
-        if (checkPerm(target)) {
-            matchUser(user) {
-                AtAllService.listAtAll(it, target.subject)
-            }?.let { sendMessage(it) }
-        }
-    }
-
-    @SubCommand("config", "配置")
-    suspend fun CommandSenderOnMessage<*>.config(
-        user: String = "0",
-        target: GroupOrContact = GroupOrContact(Contact())
-    ) {
-        if (checkPerm(target)) {
-            if (user == "0") {
-                ConfigService.config(fromEvent, 0, target.contact!!)
-            } else {
-                matchUser(user) {
-                    ConfigService.config(fromEvent, it, target.contact!!)
-                    null
-                }?.let { sendMessage(it) }
-            }
-        }
-    }
-
-    @SubCommand("search", "s", "搜索")
-    suspend fun CommandSenderOnMessage<*>.search(did: String) {
-        val msg = if (showLoadingMessage) sendMessage("加载中...") else null
+    private suspend fun search(ctx: CommandContext) {
+        val did = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili search <动态ID>").let {}
+        val msg = if (showLoadingMessage) ctx.sendMessage("加载中...") else null
         try {
             val detail = biliClient.getDynamicDetail(did)
             if (detail != null) {
-                detail.let { d -> BiliBiliDynamic.dynamicChannel.send(DynamicDetail(d, subject?.delegate)) }
+                BiliBiliDynamic.dynamicChannel.send(DynamicDetail(detail, ctx.contact.delegate))
             } else {
-                sendMessage("未找到动态")
+                ctx.sendMessage("未找到动态")
             }
         } catch (e: Exception) {
-            sendMessage("获取动态失败 ${e.message}")
+            ctx.sendMessage("获取动态失败 ${e.message}")
             logger.error("获取动态失败", e)
         }
-        msg?.recall()
+        msg?.let { ctx.deleteMessage(it) }
     }
 
-    @SubCommand("live", "直播")
-    suspend fun CommandSenderOnMessage<*>.live() {
-        val subject = Contact()
+    private suspend fun live(ctx: CommandContext) {
         val detail = biliClient.getLive(1, 1)
-        if (detail != null) subject.sendMessage("加载中...") else subject.sendMessage("当前没有人在直播")
-        detail?.let { d -> BiliBiliDynamic.liveChannel.send(LiveDetail(d.rooms.first(), subject.delegate)) }
+        if (detail != null) {
+            ctx.sendMessage("加载中...")
+            BiliBiliDynamic.liveChannel.send(LiveDetail(detail.rooms.first(), ctx.contact.delegate))
+        } else {
+            ctx.sendMessage("当前没有人在直播")
+        }
     }
 
-    @SubCommand("new", "最新动态")
-    suspend fun CommandSenderOnMessage<*>.new(user: String, count: Int = 1) {
-        val msg = if (showLoadingMessage) sendMessage("加载中...") else null
+    private suspend fun new(ctx: CommandContext) {
+        val user = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili new <用户> [数量]").let {}
+        val count = ctx.args.getOrNull(1)?.toIntOrNull() ?: 1
+        val msg = if (showLoadingMessage) ctx.sendMessage("加载中...") else null
         matchUser(user) {
             try {
                 val list = biliClient.getUserNewDynamic(it)?.items?.subList(0, count)
                 list?.forEach { di ->
-                    BiliBiliDynamic.dynamicChannel.send(DynamicDetail(di, Contact().delegate))
+                    BiliBiliDynamic.dynamicChannel.send(DynamicDetail(di, ctx.contact.delegate))
                 }
                 if (list.isNullOrEmpty()) "未找到动态" else null
-            }catch (e: Exception) {
+            } catch (e: Exception) {
                 logger.error("获取动态失败", e)
                 "获取动态失败 ${e.message}"
             }
-        }?.let { sendMessage(it) }
-        msg?.recall()
+        }?.let { ctx.sendMessage(it) }
+        msg?.let { ctx.deleteMessage(it) }
     }
 
-    @SubCommand("video", "最新视频")
-    suspend fun CommandSenderOnMessage<*>.newVideo(user: String) {
-        val msg = if (showLoadingMessage) sendMessage("加载中...") else null
+    private suspend fun newVideo(ctx: CommandContext) {
+        val user = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili video <用户>").let {}
+        val msg = if (showLoadingMessage) ctx.sendMessage("加载中...") else null
         matchUser(user) {
             try {
                 biliClient.searchUserVideo(it)?.list?.vlist?.run {
                     if (isNotEmpty()) {
                         val video = first()
                         val type = matchingRegular(video.bvid)
-                        val img = type?.drawGeneral() ?: return
-                        val imgMsg = Contact().uploadImage(img, CacheType.DRAW_SEARCH) ?: return
-                        sendMessage(buildMessageChain {
-                            +imgMsg
-                            if (BiliConfig.linkResolveConfig.returnLink) +PlainText(type.getLink())
-                        })
+                        val img = type?.drawGeneral() ?: return@run "解析失败"
+                        val imgMsg = uploadImage(img, CacheType.DRAW_SEARCH) ?: return@run "图片上传失败"
+                        val segments = mutableListOf<MessageSegment>()
+                        segments.addAll(parseMessageContent(imgMsg))
+                        if (BiliConfig.linkResolveConfig.returnLink) {
+                            segments.add(MessageSegment.text(type.getLink()))
+                        }
+                        ctx.sendMessage(segments)
                         null
                     } else {
                         "未找到视频"
                     }
                 }
-            }catch (e: Exception) {
-                logger.error("获取动态失败", e)
-                "获取动态失败 ${e.message}"
+            } catch (e: Exception) {
+                logger.error("获取视频失败", e)
+                "获取视频失败 ${e.message}"
             }
-        }?.let { sendMessage(it) }
-        msg?.recall()
+        }?.let { ctx.sendMessage(it) }
+        msg?.let { ctx.deleteMessage(it) }
     }
 
-    @SubCommand("create", "创建分组")
-    suspend fun CommandSender.createGroup(name: String) = sendMessage(
-        GroupService.createGroup(name, subject?.id ?: 0L)
-    )
+    private suspend fun createGroup(ctx: CommandContext) {
+        val name = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili create <分组名>").let {}
+        ctx.sendMessage(GroupService.createGroup(name, ctx.contact.id))
+    }
 
-    @SubCommand("listGroup", "lg", "分组列表")
-    suspend fun CommandSender.listGroup(name: String? = null) = sendMessage(
-        GroupService.listGroup(name, subject?.id ?: 0L)
-    )
+    private suspend fun listGroup(ctx: CommandContext) {
+        val name = ctx.args.getOrNull(0)
+        ctx.sendMessage(GroupService.listGroup(name, ctx.contact.id))
+    }
 
-    @SubCommand("delGroup", "dg", "删除分组")
-    suspend fun CommandSender.delGroup(name: String) = sendMessage(
-        GroupService.delGroup(name, subject?.id ?: 0L)
-    )
+    private suspend fun delGroup(ctx: CommandContext) {
+        val name = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili dg <分组名>").let {}
+        ctx.sendMessage(GroupService.delGroup(name, ctx.contact.id))
+    }
 
-    @SubCommand("addGroupAdmin", "aga", "添加分组管理员")
-    suspend fun CommandSender.setGroupAdmin(name: String, contacts: String) = sendMessage(
-        GroupService.setGroupAdmin(name, contacts, subject?.id ?: 0L)
-    )
+    private suspend fun setGroupAdmin(ctx: CommandContext) {
+        val name = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili aga <分组名> <联系人>").let {}
+        val contacts = ctx.args.getOrNull(1) ?: return ctx.sendMessage("用法: /bili aga <分组名> <联系人>").let {}
+        ctx.sendMessage(GroupService.setGroupAdmin(name, contacts, ctx.contact.id))
+    }
 
-    @SubCommand("banGroupAdmin", "bga", "删除分组管理员")
-    suspend fun CommandSender.banGroupAdmin(name: String, contacts: String) = sendMessage(
-        GroupService.banGroupAdmin(name, contacts, subject?.id ?: 0L)
-    )
+    private suspend fun banGroupAdmin(ctx: CommandContext) {
+        val name = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili bga <分组名> <联系人>").let {}
+        val contacts = ctx.args.getOrNull(1) ?: return ctx.sendMessage("用法: /bili bga <分组名> <联系人>").let {}
+        ctx.sendMessage(GroupService.banGroupAdmin(name, contacts, ctx.contact.id))
+    }
 
-    @SubCommand("push", "添加分组")
-    suspend fun CommandSender.pushGroup(name: String, contacts: String) = sendMessage(
-        GroupService.pushGroupContact(name, contacts, subject?.id ?: 0L)
-    )
+    private suspend fun pushGroup(ctx: CommandContext) {
+        val name = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili push <分组名> <联系人>").let {}
+        val contacts = ctx.args.getOrNull(1) ?: return ctx.sendMessage("用法: /bili push <分组名> <联系人>").let {}
+        ctx.sendMessage(GroupService.pushGroupContact(name, contacts, ctx.contact.id))
+    }
 
-    @SubCommand("ban")
-    suspend fun CommandSender.delGroupContact(name: String, contacts: String) = sendMessage(
-        GroupService.delGroupContact(name, contacts, subject?.id ?: 0L)
-    )
+    private suspend fun delGroupContact(ctx: CommandContext) {
+        val name = ctx.args.getOrNull(0) ?: return ctx.sendMessage("用法: /bili ban <分组名> <联系人>").let {}
+        val contacts = ctx.args.getOrNull(1) ?: return ctx.sendMessage("用法: /bili ban <分组名> <联系人>").let {}
+        ctx.sendMessage(GroupService.delGroupContact(name, contacts, ctx.contact.id))
+    }
 
-    @SubCommand("clear")
-    suspend fun CommandSenderOnMessage<*>.clear() {
-        if (BiliConfig.admin == user!!.id) {
-            val map = mutableMapOf<String, MutableList<Long>>()
-            BiliData.dynamic.forEach { (uid, sub) ->
-                sub.contacts.forEach {
-                    try {
-                        it.toLong()
-                        if (findContact(it) == null) {
-                            map.getOrPut(it) { mutableListOf() }.add(uid)
-                        }
-                    } catch (_: NumberFormatException) {
+    private suspend fun clear(ctx: CommandContext) {
+        val map = mutableMapOf<String, MutableList<Long>>()
+        BiliData.dynamic.forEach { (uid, sub) ->
+            sub.contacts.forEach {
+                try {
+                    it.toLong()
+                    if (findContact(it) == null) {
+                        map.getOrPut(it) { mutableListOf() }.add(uid)
                     }
+                } catch (_: NumberFormatException) {}
+            }
+        }
+        if (map.isEmpty()) {
+            ctx.sendMessage("未找到失效的群/好友")
+            return
+        }
+        ctx.sendMessage("发现以下失效的群/好友：\n\n${map.keys.joinToString("\n")}\n\n带负号的为群\n确认删除这些用户的订阅吗\n请回复 '确定' 或 '取消'")
+        try {
+            val reply = ctx.nextMessage(300000)
+            if (reply == "确定") {
+                map.forEach { (c, u) ->
+                    u.forEach { DynamicService.removeSubscribe(it, c) }
                 }
+                ctx.sendMessage("删除成功")
+            } else {
+                ctx.sendMessage("已取消")
             }
-            if (map.isEmpty()) {
-                sendMessage("未找到失效的群/好友")
-                return
-            }
-            sendMessage("发现以下失效的群/好友：\n\n${map.keys.joinToString("\n")}\n\n带负号的为群\n确认删除这些用户的订阅吗\n请回复 ‘确定’ 或 ‘取消’")
-            try {
-                val msg = fromEvent.nextMessage(300000)
-                if (msg.content == "确定") {
-                    map.forEach { (c, u) ->
-                        u.forEach {
-                            DynamicService.removeSubscribe(it, c)
-                        }
-                    }
-                    sendMessage("删除成功")
-                } else sendMessage("已取消")
-            } catch (_: TimeoutCancellationException) {
-            }
-        }else {
-            sendMessage("权限不足，仅bot管理员可操作")
+        } catch (_: Exception) {
+            // timeout
         }
-
     }
 
-    suspend fun CommandSender.checkPerm(target: GroupOrContact): Boolean {
-        if (target.group != null && !GroupService.checkGroupPerm(target.group.name, Contact().id)) {
-            sendMessage("权限不足, 无法操作其他分组")
-            return false
-        }
-        if (target.group == null && !hasPermission(crossContact) && (target.contact?.delegate
-                ?: "0") != Contact().delegate
-        ) {
-            sendMessage("权限不足, 无法操作其他人")
-            return false
-        }
-        return true
+    /**
+     * Create a base64 image URI from raw bytes for direct sending.
+     */
+    private fun imageCodeRaw(bytes: ByteArray): String {
+        val b64 = java.util.Base64.getEncoder().encodeToString(bytes)
+        return "base64://$b64"
     }
-
 }
-
-fun CommandSender.Contact(): Contact = subject ?: throw CommandArgumentParserException("无法从当前环境获取联系人")

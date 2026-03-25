@@ -1,35 +1,18 @@
 package top.colter.mirai.plugin.bilibili
 
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
-import net.mamoe.mirai.console.MiraiConsole
-import net.mamoe.mirai.console.command.CommandManager.INSTANCE.register
-import net.mamoe.mirai.console.command.CommandManager.INSTANCE.unregister
-import net.mamoe.mirai.console.extension.PluginComponentStorage
-import net.mamoe.mirai.console.permission.PermissionId
-import net.mamoe.mirai.console.permission.PermissionService
-import net.mamoe.mirai.console.plugin.jvm.JvmPluginDescription
-import net.mamoe.mirai.console.plugin.jvm.KotlinPlugin
-import net.mamoe.mirai.console.plugin.name
-import net.mamoe.mirai.console.plugin.version
-import net.mamoe.mirai.console.util.SemVersion
-import net.mamoe.mirai.utils.info
-import top.colter.mirai.plugin.bilibili.command.DynamicCommand
+import org.slf4j.LoggerFactory
 import top.colter.mirai.plugin.bilibili.data.*
-import top.colter.mirai.plugin.bilibili.old.migration
-import top.colter.mirai.plugin.bilibili.old.updateData
 import top.colter.mirai.plugin.bilibili.tasker.*
+import java.io.File
+import java.nio.file.Path
 
-object BiliBiliDynamic : KotlinPlugin(
-    JvmPluginDescription(
-        id = "top.colter.bilibili-dynamic-mirai-plugin",
-        name = "BiliBili Dynamic",
-        version = "3.2.16",
-    ) {
-        author("Colter")
-        dependsOn("xyz.cssxsh.mirai.plugin.mirai-skia-plugin", ">= 1.1.0")
-    }
-) {
+object BiliBiliDynamic : CoroutineScope {
+    val logger = LoggerFactory.getLogger("Bili")!!
+
+    private val supervisorJob = SupervisorJob()
+    override val coroutineContext = supervisorJob + Dispatchers.Default + CoroutineName("BiliBiliDynamic")
 
     var uid: Long = 0L
     var tagid: Int = 0
@@ -43,60 +26,59 @@ object BiliBiliDynamic : KotlinPlugin(
 
     val liveUsers = mutableMapOf<Long, Long>()
 
-    val liveGwp = PermissionId(BiliBiliDynamic.description.id, "live.atall")
-    val videoGwp = PermissionId(BiliBiliDynamic.description.id, "video.atall")
-    val crossContact = PermissionId(BiliBiliDynamic.description.id, "crossContact")
+    lateinit var dataFolder: File
+    lateinit var dataFolderPath: Path
+    lateinit var configFolder: File
 
-    override fun PluginComponentStorage.onLoad() {
-        /**
-         * run after auto login
-         * @author cssxsh
-         */
-        runAfterStartup {
-            updateData()
-
-            DynamicCheckTasker.start()
-            LiveCheckTasker.start()
-            DynamicMessageTasker.start()
-            LiveMessageTasker.start()
-            SendTasker.start()
-            ListenerTasker.start()
-            if (BiliConfig.enableConfig.liveCloseNotifyEnable) LiveCloseCheckTasker.start()
-            if (BiliConfig.enableConfig.cacheClearEnable) CacheClearTasker.start()
-        }
+    fun init(dataDir: File, configDir: File) {
+        dataFolder = dataDir
+        dataFolderPath = dataDir.toPath()
+        configFolder = configDir
+        dataDir.mkdirs()
+        configDir.mkdirs()
     }
 
-    override fun onEnable() {
-        // XXX: mirai console version check
-        check(SemVersion.parseRangeRequirement(">= 2.12.0-RC").test(MiraiConsole.version)) {
-            "$name $version 需要 Mirai-Console 版本 >= 2.12.0，目前版本是 ${MiraiConsole.version}"
-        }
-        logger.info { "BiliBili Dynamic Plugin loaded" }
+    fun getResourceAsStream(path: String) =
+        BiliBiliDynamic::class.java.getResourceAsStream("/$path")
+            ?: BiliBiliDynamic::class.java.classLoader.getResourceAsStream(path)
 
-        PermissionService.INSTANCE.register(liveGwp, "直播At全体")
-        PermissionService.INSTANCE.register(videoGwp, "视频At全体")
-        PermissionService.INSTANCE.register(crossContact, "跨聊天语境控制")
+    fun onEnable() {
+        logger.info("BiliBili Dynamic loaded (OneBot 11)")
 
-        DynamicCommand.register()
+        BiliConfig.init(configFolder)
+        BiliData.init(dataFolder)
+        BiliImageTheme.init(configFolder)
+        BiliImageQuality.init(configFolder)
 
         BiliData.reload()
         BiliConfig.reload()
         BiliImageTheme.reload()
         BiliImageQuality.reload()
 
-        migration()
-
-        launch { initData() }
+        OneBotConfig.reload()
     }
 
-    override fun onDisable() {
-        DynamicCommand.unregister()
+    fun onStartup() {
+        DynamicCheckTasker.start()
+        LiveCheckTasker.start()
+        DynamicMessageTasker.start()
+        LiveMessageTasker.start()
+        SendTasker.start()
+        ListenerTasker.start()
+        if (BiliConfig.enableConfig.liveCloseNotifyEnable) LiveCloseCheckTasker.start()
+        if (BiliConfig.enableConfig.cacheClearEnable) CacheClearTasker.start()
+    }
+
+    fun onDisable() {
         dynamicChannel.close()
         messageChannel.close()
-
         BiliTasker.cancelAll()
-
         BiliData.save()
         BiliConfig.save()
+    }
+
+    fun shutdown() {
+        onDisable()
+        supervisorJob.cancel()
     }
 }

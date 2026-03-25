@@ -3,8 +3,6 @@ pluginManagement {
         mavenLocal()
         gradlePluginPortal()
         mavenCentral()
-        jcenter()
-        maven("https://dl.bintray.com/kotlin/kotlin-eap")
     }
 }
-rootProject.name = "bilibili-dynamic-mirai-plugin"
+rootProject.name = "bilibili-dynamic-onebot"

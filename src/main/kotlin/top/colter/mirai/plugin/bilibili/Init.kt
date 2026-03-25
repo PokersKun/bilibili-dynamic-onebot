@@ -1,5 +1,7 @@
 package top.colter.mirai.plugin.bilibili
 
+import io.ktor.client.call.*
+import io.ktor.client.request.*
 import top.colter.mirai.plugin.bilibili.BiliConfig.accountConfig
 import top.colter.mirai.plugin.bilibili.api.createGroup
 import top.colter.mirai.plugin.bilibili.api.followGroup
@@ -9,11 +11,11 @@ import top.colter.mirai.plugin.bilibili.data.toCookie
 import top.colter.mirai.plugin.bilibili.utils.FontUtils.loadTypeface
 import top.colter.mirai.plugin.bilibili.utils.biliClient
 import top.colter.mirai.plugin.bilibili.utils.decode
-import xyz.cssxsh.mirai.skia.downloadTypeface
-import kotlin.io.path.createDirectory
-import kotlin.io.path.exists
-import kotlin.io.path.forEachDirectoryEntry
-import kotlin.io.path.name
+import java.io.BufferedInputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.util.zip.ZipInputStream
+import kotlin.io.path.*
 
 suspend fun initData() {
     checkCookie()
@@ -61,31 +63,65 @@ suspend fun initTagid() {
         } catch (e: Exception) {
             BiliBiliDynamic.logger.error("初始化分组失败 ${e.message}")
         }
-
     }
 }
 
 suspend fun loadFonts() {
     val fontFolder = BiliBiliDynamic.dataFolder.resolve("font")
     val fontFolderPath = BiliBiliDynamic.dataFolderPath.resolve("font")
-    val LXGW = fontFolder.resolve("LXGWWenKai-Bold.ttf")
+    val defaultFont = fontFolder.resolve("HarmonyOS_Sans_SC_Regular.ttf")
 
     fontFolderPath.apply {
         if (!exists()) createDirectory()
-        if (fontFolder.listFiles().none { it.isFile } || !LXGW.exists()) {
+        if (fontFolder.listFiles()?.none { it.isFile } != false || !defaultFont.exists()) {
             try {
-                downloadTypeface(fontFolder, "https://file.zfont.cn/d/file/font_cn_file/霞鹜文楷-v1.235.2.zip")
-                val f = fontFolder.resolve("霞鹜文楷-v1.235.2")
-                f.resolve("LXGWWenKai-Bold.ttf").copyTo(LXGW)
-                try {
-                    f.walkBottomUp().onLeave { it.delete() }
-                }catch (_: Exception) { }
-            }catch (e: Throwable) {
+                downloadAndExtractZip(
+                    "https://developer.huawei.com/images/download/general/HarmonyOS-Sans.zip",
+                    fontFolder
+                )
+                val src = fontFolder.resolve("HarmonyOS Sans")
+                    .resolve("HarmonyOS_Sans_SC")
+                    .resolve("HarmonyOS_Sans_SC_Regular.ttf")
+                if (src.exists()) {
+                    src.copyTo(defaultFont, overwrite = true)
+                }
+                // Clean up extracted directories
+                listOf("HarmonyOS Sans", "__MACOSX").forEach { name ->
+                    fontFolder.resolve(name).let { dir ->
+                        if (dir.exists()) try {
+                            dir.walkBottomUp().forEach { it.delete() }
+                        } catch (_: Exception) { }
+                    }
+                }
+            } catch (e: Throwable) {
                 BiliBiliDynamic.logger.error("下载字体失败! $e")
             }
         }
         forEachDirectoryEntry {
             if (it.toFile().isFile) loadTypeface(it.toString(), it.name.split(".").first())
+        }
+    }
+}
+
+private suspend fun downloadAndExtractZip(url: String, targetDir: File) {
+    targetDir.mkdirs()
+    val zipBytes = biliClient.useHttpClient { client ->
+        client.get(url).body<ByteArray>()
+    }
+    ZipInputStream(BufferedInputStream(zipBytes.inputStream())).use { zis ->
+        var entry = zis.nextEntry
+        while (entry != null) {
+            val outFile = targetDir.resolve(entry.name)
+            if (entry.isDirectory) {
+                outFile.mkdirs()
+            } else {
+                outFile.parentFile?.mkdirs()
+                FileOutputStream(outFile).use { fos ->
+                    zis.copyTo(fos)
+                }
+            }
+            zis.closeEntry()
+            entry = zis.nextEntry
         }
     }
 }

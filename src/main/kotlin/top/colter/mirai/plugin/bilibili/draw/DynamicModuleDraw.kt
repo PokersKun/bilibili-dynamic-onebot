@@ -97,7 +97,7 @@ suspend fun ModuleDynamic.Additional.makeGeneral(): Image? {
         }
 
         else -> {
-            logger.warning("未知类型附加卡片 $type")
+            logger.warn("未知类型附加卡片 $type")
             null
         }
     }
@@ -221,7 +221,7 @@ suspend fun ModuleDispute.drawGeneral(): Image {
                 drawImage(svg.makeImage(iconSize, iconSize), x, y - quality.contentFontSize * 0.9f)
                 x += iconSize + quality.lineSpace
             } catch (e: Exception) {
-                logger.warning("未找到类型为 DISPUTE 的图标")
+                logger.warn("未找到类型为 DISPUTE 的图标")
             }
 
             drawTextArea(title, textCardRect, x, y, font, Paint().apply { color = Color.makeRGB(231, 139, 31) })
@@ -251,7 +251,7 @@ suspend fun ModuleDynamic.Topic.drawGeneral(): Image {
                 drawImage(svg.makeImage(iconSize, iconSize), x, y - quality.contentFontSize * 0.9f)
                 x += iconSize + quality.lineSpace
             } catch (e: Exception) {
-                logger.warning("未找到类型为 TOPIC 的图标")
+                logger.warn("未找到类型为 TOPIC 的图标")
             }
 
             drawTextArea(name, textCardRect, x, y, font, linkPaint)
@@ -331,7 +331,7 @@ suspend fun ModuleDynamic.ContentDesc.drawGeneral(): Image {
                             drawImage(svg.makeImage(iconSize, iconSize), x, y - quality.contentFontSize * 0.9f)
                             x += iconSize
                         } catch (e: Exception) {
-                            logger.warning("未找到类型为 ${it.type} 的图标")
+                            logger.warn("未找到类型为 ${it.type} 的图标")
                         }
 
                         val point = drawTextArea(it.text, textCardRect, x, y, font, linkPaint)
