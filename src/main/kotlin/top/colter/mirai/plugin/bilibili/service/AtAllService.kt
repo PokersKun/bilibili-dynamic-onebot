@@ -5,6 +5,7 @@ import kotlinx.coroutines.sync.withLock
 import top.colter.mirai.plugin.bilibili.AtAllType
 import top.colter.mirai.plugin.bilibili.command.GroupOrContact
 import top.colter.mirai.plugin.bilibili.command.subject
+import top.colter.mirai.plugin.bilibili.onebot.BotInstance
 import top.colter.mirai.plugin.bilibili.onebot.OBGroup
 
 object AtAllService {
@@ -58,9 +59,38 @@ object AtAllService {
         if (atAll[subject]?.get(uid)?.remove(atAllType) == true) "删除成功" else "删除失败"
     }
 
+    private fun formatSubjectEntries(subjectMap: Map<Long, Set<AtAllType>>, uid: Long): String? {
+        val entries = if (uid != 0L) {
+            val list = subjectMap[uid]
+            if (list.isNullOrEmpty()) return null
+            mapOf(uid to list)
+        } else {
+            subjectMap.filter { it.value.isNotEmpty() }.ifEmpty { return null }
+        }
+        return buildString {
+            entries.forEach { (u, types) ->
+                val name = dynamic[u]?.name ?: u.toString()
+                appendLine("  [$name ($u)]")
+                types.forEach { appendLine("    ${it.value}") }
+            }
+        }
+    }
+
     suspend fun listAtAll(uid: Long = 0L, subject: String) = mutex.withLock {
-        val list = atAll[subject]?.get(uid)
-        if (list.isNullOrEmpty()) return@withLock "没有At全体项哦"
-        buildString { list.forEach { appendLine(it.value) } }
+        val subjectMap = atAll[subject]
+        if (subjectMap.isNullOrEmpty()) return@withLock "没有At全体项哦"
+        formatSubjectEntries(subjectMap, uid) ?: "没有At全体项哦"
+    }
+
+    suspend fun listAtAllAll(uid: Long = 0L) = mutex.withLock {
+        val nonEmpty = atAll.filter { it.value.any { (_, types) -> types.isNotEmpty() } }
+        if (nonEmpty.isEmpty()) return@withLock "没有At全体项哦"
+        buildString {
+            nonEmpty.forEach { (subject, subjectMap) ->
+                val contactName = BotInstance.findContact(subject)?.contactName ?: subject
+                appendLine("【$contactName ($subject)】")
+                formatSubjectEntries(subjectMap, uid)?.let { append(it) }
+            }
+        }.trimEnd().ifEmpty { "没有At全体项哦" }
     }
 }

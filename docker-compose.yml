@@ -1,0 +1,11 @@
+services:
+  bilibili-dynamic:
+    container_name: bilibili-dynamic-onebot
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+    volumes:
+      - ./config:/app/config
+      - ./data:/app/data
+    image: pocketfan233/bilibili-dynamic-onebot:latest

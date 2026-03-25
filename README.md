@@ -2,17 +2,18 @@
 
 一个可低延迟检测 B 站动态/直播并转发到 QQ 群的独立应用，通过 [OneBot 11](https://github.com/botuniverse/onebot-11) 协议对接 QQ，完全基于 [bilibili-dynamic-mirai-plugin](https://github.com/Colter23/bilibili-dynamic-mirai-plugin) 通过 Claude Opus 4.6 改造而来
 
-![Stars](https://img.shields.io/github/stars//PokersKun/bilibili-dynamic-onebot)
-![Downloads](https://img.shields.io/github/downloads//PokersKun/bilibili-dynamic-onebot/total)
-[![Release](https://img.shields.io/github/v/release//PokersKun/bilibili-dynamic-onebot)](https://github.com//PokersKun/bilibili-dynamic-onebot/releases)
-
 ## 特性
 
 **无论多少订阅均可在最低 10s 内检测所有动态**
+
 使用 [skiko](https://github.com/JetBrains/skiko) 绘图
+
 番剧订阅
+
 动态过滤
+
 扫码登录
+
 可配置性高
 
 ## 样式预览
@@ -33,11 +34,9 @@
 - 一个支持 OneBot 11 正向 WebSocket 的 QQ Bot 实现（如 [NapCat](https://github.com/NapNeko/NapCatQQ)、[Lagrange](https://github.com/LagrangeDev/Lagrange.Core) 等）
 - 配置 WebSocket 服务器时需要选择 Array 数据格式，Token 可填可不填
 
-### 下载
+### 方式一：直接运行 JAR
 
-从 [Releases](https://github.com//PokersKun/bilibili-dynamic-onebot/releases) 下载最新的 JAR 文件
-
-### 运行
+从 [Releases](https://github.com/PokersKun/bilibili-dynamic-onebot/releases) 下载最新的 JAR 文件
 
 ```bash
 java -jar bilibili-dynamic-onebot.jar [数据目录] [配置目录]
@@ -45,6 +44,35 @@ java -jar bilibili-dynamic-onebot.jar [数据目录] [配置目录]
 
 - `数据目录`：数据存储路径，默认 `./data`
 - `配置目录`：配置文件路径，默认 `./config`
+
+### 方式二：Docker 一行命令启动
+
+```bash
+docker run -d --name bilibili-dynamic-onebot \
+  --restart unless-stopped \
+  -e PUID=$(id -u) -e PGID=$(id -g) \
+  -v ./config:/app/config \
+  -v ./data:/app/data \
+  pocketfan233/bilibili-dynamic-onebot:latest
+```
+
+通过 `PUID`/`PGID` 环境变量指定运行用户，映射出来的文件归属当前用户，不设置则以 root 运行。
+
+### 方式三：Docker Compose
+
+```bash
+git clone https://github.com/PokersKun/bilibili-dynamic-onebot.git
+cd bilibili-dynamic-onebot
+PUID=$(id -u) PGID=$(id -g) docker compose up -d
+```
+
+**注意**：如果 OneBot 的 WebSocket 服务器设置和默认配置不同，运行之后会提示无法连接（可以通过 `docker logs bilibili-dynamic-onebot -f` 命令查看日志），可以先根据下面的说明修改 OneBot 配置文件之后再重新通过 `docker restart bilibili-dynamic-onebot` 来重启容器。
+
+配置文件会自动生成在 `./config/` 目录下。
+
+> **注意**：Docker 部署时，`OneBotConfig.yml` 中的 `wsUrl` 不能使用 `127.0.0.1`，需要使用宿主机 IP 或 Docker 网络地址（如 `ws://host.docker.internal:3001` 或 `ws://172.17.0.1:3001`）。
+
+---
 
 首次运行会自动生成默认配置文件，请先编辑 `config/OneBotConfig.yml` 配置 WebSocket 地址和管理员账号。
 
@@ -94,7 +122,7 @@ token: ''
 | `/bili template` (t) `<类型:d\|l\|le> <模板名> [目标]` | 设置推送模板 |
 | `/bili atall` (aa) `[类型] [用户] [目标]` | 添加@全体（配置后直接生效） |
 | `/bili delatall` (daa) `[类型] [用户] [目标]` | 取消@全体 |
-| `/bili listatall` (laa) `[用户] [目标]` | 查看@全体列表 |
+| `/bili listatall` (laa) `[用户]` | 查看@全体列表（私聊查看所有群，群聊查看当前群） |
 
 | 搜索 | 描述 |
 |------|------|

@@ -37,7 +37,7 @@ object DynamicCommand {
         CommandDispatcher.register("login", "登录", description = "扫码登录B站") { ctx -> login(ctx) }
         CommandDispatcher.register("atall", "aa", "at全体", description = "添加@全体 [类型] [用户] [目标]") { ctx -> atall(ctx) }
         CommandDispatcher.register("delatall", "daa", "取消at全体", description = "取消@全体 [类型] [用户] [目标]") { ctx -> delAtall(ctx) }
-        CommandDispatcher.register("listatall", "laa", "at全体列表", description = "查看@全体列表 [用户] [目标]") { ctx -> listAtall(ctx) }
+        CommandDispatcher.register("listatall", "laa", "at全体列表", description = "查看@全体列表 [用户] (私聊查看所有群，群聊查看当前群)") { ctx -> listAtall(ctx) }
         CommandDispatcher.register("config", "配置", description = "交互式配置 [用户] [目标]") { ctx -> config(ctx) }
         CommandDispatcher.register("search", "s", "搜索", description = "获取动态详情 <动态ID>") { ctx -> search(ctx) }
         CommandDispatcher.register("live", "直播", description = "查看当前直播状态") { ctx -> live(ctx) }
@@ -236,11 +236,19 @@ object DynamicCommand {
 
     private suspend fun listAtall(ctx: CommandContext) {
         val user = ctx.args.getOrNull(0) ?: "0"
-        val target = resolveTarget(ctx, 1)
+        val isPrivate = ctx.contact is OBFriend
 
-        matchUser(user) {
-            AtAllService.listAtAll(it, target.subject)
-        }?.let { ctx.sendMessage(it) }
+        if (isPrivate) {
+            // 私聊：列出所有群的atall列表
+            matchUser(user) {
+                AtAllService.listAtAllAll(it)
+            }?.let { ctx.sendMessage(it) }
+        } else {
+            // 群聊：只列出当前群的atall列表
+            matchUser(user) {
+                AtAllService.listAtAll(it, ctx.contact.delegate)
+            }?.let { ctx.sendMessage(it) }
+        }
     }
 
     private suspend fun config(ctx: CommandContext) {
