@@ -204,6 +204,8 @@ data class OneBotConfig(
     val wsUrl: String = "ws://127.0.0.1:3001",
     val adminIds: List<Long> = listOf(123456789L),
     val token: String = "",
+    val reconnectInterval: Long = 5000,
+    val reconnectMaxRetries: Int = -1,
 ) {
     companion object {
         private lateinit var configFile: File
@@ -212,6 +214,8 @@ data class OneBotConfig(
         val wsUrl: String get() = data.wsUrl
         val adminIds: List<Long> get() = data.adminIds
         val token: String get() = data.token
+        val reconnectInterval: Long get() = data.reconnectInterval
+        val reconnectMaxRetries: Int get() = data.reconnectMaxRetries
 
         fun isAdmin(userId: Long): Boolean = adminIds.contains(userId)
 

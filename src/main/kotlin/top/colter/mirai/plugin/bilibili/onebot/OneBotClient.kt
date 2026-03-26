@@ -17,7 +17,9 @@ import java.util.concurrent.atomic.AtomicLong
 class OneBotClient(
     private val wsUrl: String,
     private val scope: CoroutineScope,
-    private val token: String = ""
+    private val token: String = "",
+    private val reconnectInterval: Long = 5000,
+    private val reconnectMaxRetries: Int = -1,
 ) {
     private val logger = LoggerFactory.getLogger("OBot")
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -47,7 +49,7 @@ class OneBotClient(
     }
 
     suspend fun connect() {
-        var retryDelay = 1000L
+        var retries = 0
         while (scope.isActive) {
             try {
                 logger.info("正在连接 OneBot WebSocket: $wsUrl")
@@ -58,7 +60,7 @@ class OneBotClient(
                 }) {
                     session = this
                     connected = true
-                    retryDelay = 1000L
+                    retries = 0
                     logger.info("OneBot WebSocket 连接成功")
 
                     for (frame in incoming) {
@@ -84,9 +86,15 @@ class OneBotClient(
             }
             connected = false
             session = null
-            logger.info("将在 ${retryDelay}ms 后重连...")
-            delay(retryDelay)
-            retryDelay = (retryDelay * 2).coerceAtMost(30000L)
+
+            retries++
+            if (reconnectMaxRetries >= 0 && retries > reconnectMaxRetries) {
+                logger.error("已达到最大重连次数 ($reconnectMaxRetries)，停止重连")
+                break
+            }
+            val retryInfo = if (reconnectMaxRetries >= 0) " ($retries/$reconnectMaxRetries)" else ""
+            logger.info("将在 ${reconnectInterval}ms 后重连...$retryInfo")
+            delay(reconnectInterval)
         }
     }
 
@@ -176,6 +184,7 @@ class OneBotClient(
     }
 
     suspend fun sendGroupMsg(groupId: Long, message: List<MessageSegment>): Long {
+        logger.info("发送群消息 -> $groupId: ${summarizeMessage(message)}")
         val resp = callApi("send_group_msg", buildJsonObject {
             put("group_id", groupId)
             put("message", json.encodeToJsonElement(message))
@@ -184,6 +193,7 @@ class OneBotClient(
     }
 
     suspend fun sendPrivateMsg(userId: Long, message: List<MessageSegment>): Long {
+        logger.info("发送私聊消息 -> $userId: ${summarizeMessage(message)}")
         val resp = callApi("send_private_msg", buildJsonObject {
             put("user_id", userId)
             put("message", json.encodeToJsonElement(message))
@@ -205,6 +215,7 @@ class OneBotClient(
         prompt: String? = null,
         news: List<String>? = null
     ): Long {
+        logger.info("发送群合并转发 -> $groupId (${nodes.size}条节点)")
         val resp = callApi("send_group_forward_msg", buildJsonObject {
             put("group_id", groupId)
             put("message", json.encodeToJsonElement(nodes))
@@ -224,6 +235,7 @@ class OneBotClient(
         prompt: String? = null,
         news: List<String>? = null
     ): Long {
+        logger.info("发送私聊合并转发 -> $userId (${nodes.size}条节点)")
         val resp = callApi("send_private_forward_msg", buildJsonObject {
             put("user_id", userId)
             put("message", json.encodeToJsonElement(nodes))
@@ -233,6 +245,21 @@ class OneBotClient(
             news?.let { put("news", buildJsonArray { it.forEach { n -> addJsonObject { put("text", n) } } }) }
         })
         return optionalMsgId(resp)
+    }
+
+    private fun summarizeMessage(segments: List<MessageSegment>): String {
+        return segments.joinToString("") { seg ->
+            when (seg.type) {
+                "text" -> seg.data["text"]?.jsonPrimitive?.contentOrNull?.let {
+                    if (it.length > 50) it.take(50) + "..." else it
+                } ?: ""
+                "image" -> "[图片]"
+                "at" -> "[at:${seg.data["qq"]?.jsonPrimitive?.contentOrNull}]"
+                "face" -> "[表情]"
+                "node" -> "[转发节点]"
+                else -> "[${seg.type}]"
+            }
+        }.let { if (it.length > 200) it.take(200) + "..." else it }
     }
 
     fun close() {

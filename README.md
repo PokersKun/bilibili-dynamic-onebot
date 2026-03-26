@@ -49,7 +49,7 @@ java -jar bilibili-dynamic-onebot.jar [数据目录] [配置目录]
 
 ```bash
 docker run -d --name bilibili-dynamic-onebot \
-  --restart unless-stopped \
+  --restart always \
   -e PUID=$(id -u) -e PGID=$(id -g) \
   -v ./config:/app/config \
   -v ./data:/app/data \
@@ -88,6 +88,10 @@ adminIds:
   - 123456789
 # 连接 OneBot 时使用的 Token（可选，留空则不使用）
 token: ''
+# 断线重连间隔（毫秒），默认 5000（5秒）
+reconnectInterval: 5000
+# 最大重连次数，-1 表示无限重试（默认）
+reconnectMaxRetries: -1
 ```
 
 ## 指令
@@ -140,8 +144,11 @@ token: ''
 **指令中的 `目标` 可以是 好友 / 群 / 分组**
 
 `<..>` 尖括号为必填参数   `[..]` 中括号为可选参数
+
 `[目标]` 不填的话默认对话所在地
+
 `<HEX颜色>` 必须带#号 支持多个值自定义渐变 中间用分号';'分隔 例: `#fde8ed;#fde8ed`
+
 `uid / 用户名` 使用名称可以`本地`模糊匹配（只有订阅过才能匹配）
 
 ```
@@ -316,31 +323,53 @@ token: ''
 ##### 动态模板配置项
 
 `{draw}`: 绘制的动态图
+
 `{name}`: 名称
+
 `{uid}`: 用户ID
+
 `{did}`: 动态ID
+
 `{type}`: 动态类型
+
 `{time}`: 时间
+
 `{content}`: 动态内容
+
 `{images}`: 动态中的图
+
 `{link}`: 动态链接
+
 `{links}`: 视频专栏等有多个链接
+
 `\n`: 换行
+
 `\r`: 分割对话(会生成多个QQ消息)
+
 `{>>} {<<}`: 包装成转发消息
 
 ##### 直播模板配置项
 
 `{draw}`: 绘制的直播图
+
 `{name}`: 名称
+
 `{uid}`: 用户ID
+
 `{rid}`: 房间号
+
 `{time}`: 直播开始时间
+
 `{title}`: 直播标题
+
 `{area}`: 直播分区
+
 `{cover}`: 直播封面
+
 `{link}`: 直播链接
+
 `\n`: 换行
+
 `\r`: 分割对话(会生成多个QQ消息)
 
 注: 直播模板不支持 (`{>>}{<<}`) 转发消息
@@ -348,14 +377,23 @@ token: ''
 ##### 直播结束模板配置项
 
 `{name}`: 名称
+
 `{uid}`: 用户ID
+
 `{rid}`: 房间号
+
 `{title}`: 直播标题
+
 `{area}`: 直播分区
+
 `{startTime}`: 直播开始时间
+
 `{endTime}`: 直播结束时间
+
 `{duration}`: 直播时长
+
 `{link}`: 直播链接
+
 `\n`: 换行
 
 注: 直播结束模板不支持 (`{>>}{<<}`) 转发消息 和 (`\r`) 分隔对话
@@ -363,19 +401,29 @@ token: ''
 ##### 转发卡片配置项
 
 `{name}`: 名称
+
 `{uid}`: 用户ID
+
 `{did}`: 动态ID
+
 `{type}`: 动态类型
+
 `{time}`: 时间
+
 `{content}`: 动态内容
+
 `{link}`: 链接
 
 ##### 页脚配置项
 
 `{name}`: 名称
+
 `{uid}`: 用户ID
+
 `{id}`: 动态/直播ID
+
 `{type}`: 类型
+
 `{time}`: 时间
 
 #### CacheConfig
@@ -411,12 +459,15 @@ token: ''
 ### 基本原理
 
 通过检测 [动态](https://t.bilibili.com/) 界面，检测账号关注的所有最新动态，再挑选出 QQ 订阅的动态，这样一个检测周期就可以检测所有最新动态。
+
 因此，本应用需要一个 B 站账号来订阅用户。
+
 **强烈推荐使用小号**
 
 ### 关于自动关注
 
 如果账号没有关注过此人，bot 会自动关注并把他分到一个新分组中，方便管理
+
 是否开启自动关注以及新分组的名称都可以在配置文件中进行配置
 
 ### 字体
@@ -424,6 +475,7 @@ token: ''
 #### [HarmonyOS Sans](https://developer.harmonyos.com/cn/docs/design/des-resources/general-0000001157315901)
 
 选择下载字体压缩包文件，请使用压缩包内 `HarmonyOS_Sans_SC` 目录下的字体（简体中文）
+
 不同文件代表不同粗细，建议使用 `Regular` 或 `Medium`
 
 **下载到字体后请将字体文件放到 `数据目录/font` 文件夹内**
@@ -437,11 +489,15 @@ token: ''
 #### 通过开发者工具获取
 
 建议开启浏览器无痕模式
+
 浏览器打开 [BiliBili](https://www.bilibili.com/) 并登录
+
 注：**登录后不要点退出登录**
 
 按 `F12` 打开开发者工具，找到 `Network / 网络`
+
 按 `F5` 刷新页面，复制 Cookie
+
 将 Cookie 粘贴到配置文件 `accountConfig.cookie` 中，**使用双引号包裹**
 
 ### 图片缓存
@@ -455,10 +511,13 @@ token: ''
 ## 相关链接
 
 [B站: 狂捡垃圾袋](https://space.bilibili.com/2467469)
+
 [B站: Colter_null](https://space.bilibili.com/32868931)
 
 ## 感谢
 
 Colter23: [bilibili-dynamic-mirai-plugin](https://github.com/Colter23/bilibili-dynamic-mirai-plugin)
+
 cssxsh: [bilibili-helper](https://github.com/cssxsh/bilibili-helper)
+
 Twitter Emoji: [Twemoji](https://github.com/twitter/twemoji)

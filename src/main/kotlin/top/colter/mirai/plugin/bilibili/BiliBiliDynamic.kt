@@ -11,8 +11,12 @@ import java.nio.file.Path
 object BiliBiliDynamic : CoroutineScope {
     val logger = LoggerFactory.getLogger("Bili")!!
 
+    private val exceptionHandler = CoroutineExceptionHandler { ctx, throwable ->
+        val name = ctx[CoroutineName]?.name ?: "unknown"
+        logger.error("$name: ${throwable.message}", throwable)
+    }
     private val supervisorJob = SupervisorJob()
-    override val coroutineContext = supervisorJob + Dispatchers.Default + CoroutineName("BiliBiliDynamic")
+    override val coroutineContext = supervisorJob + Dispatchers.Default + CoroutineName("BiliBiliDynamic") + exceptionHandler
 
     var uid: Long = 0L
     var tagid: Int = 0
