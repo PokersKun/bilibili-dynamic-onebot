@@ -3,7 +3,7 @@ FROM eclipse-temurin:11-jre-jammy
 LABEL maintainer="PokersKun"
 LABEL description="BiliBili Dynamic OneBot 11"
 
-ENV JAR_URL=https://github.com/PokersKun/bilibili-dynamic-onebot/releases/download/onebot-v3.2.16/bilibili-dynamic-onebot-3.2.16.jar
+ENV JAR_URL=https://github.com/PokersKun/bilibili-dynamic-onebot/releases/download/onebot-v3.2.18/bilibili-dynamic-onebot-3.2.18.jar
 ENV PUID=0
 ENV PGID=0
 

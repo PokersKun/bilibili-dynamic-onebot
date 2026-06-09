@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "top.colter"
-version = "3.2.16"
+version = "3.2.18"
 
 application {
     mainClass.set("top.colter.mirai.plugin.bilibili.MainKt")
